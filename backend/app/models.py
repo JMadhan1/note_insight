@@ -119,6 +119,7 @@ class NoteListItem(BaseModel):
     created_at: datetime
     condition_count: int
     review_status: ReviewStatus
+    latest_analysis_id: str | None
 
 
 class NoteWithAnalysis(BaseModel):

@@ -106,6 +106,7 @@ def list_notes(uid: str, limit: int = 50) -> list[NoteListItem]:
                 created_at=d["createdAt"],
                 condition_count=d.get("latestConditionCount", 0),
                 review_status=ReviewStatus(d.get("latestReviewStatus", "pending")),
+                latest_analysis_id=d.get("latestAnalysisId"),
             )
         )
     return items
