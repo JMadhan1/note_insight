@@ -176,15 +176,16 @@ know the model didn't make this up?" — tested in `test_quote_verification.py` 
 `test_gemini_service.py`, including a deliberate false-positive check (`"diabetes"` must not
 match `"diabetic"`).
 
-**4. Cloud Run over Fly.io/Railway for the backend, despite the assessment listing all four
-options.** Both Fly.io and Railway's genuinely free tiers are gone as of 2026 — Fly.io removed
-free allowances for new accounts in 2024, and Railway's "free" plan is now a one-time $5
-credit that expires in 30 days, not durable hosting. Cloud Run's always-free quota (2M
-requests/month) has no such expiry and shares a GCP project with Firebase. The tradeoff is a
-billing account has to exist on the account (even though nothing is charged under quota),
-versus Render, which needs no card at all but sleeps the container after 15 minutes idle
-(30–60s cold start on the next request) — a reasonable fallback if avoiding the billing-account
-step matters more than avoiding cold starts.
+**4. Render over Fly.io/Railway/Cloud Run for the backend, despite the assessment listing all
+four.** Fly.io removed free allowances for new accounts in 2024, and Railway's "free" plan is
+now a one-time $5 credit that expires in 30 days — neither is durable hosting. Cloud Run's
+always-free quota (2M requests/month) is genuinely free and would avoid Render's cold-start
+tradeoff entirely, but it requires a GCP billing account on file and the `gcloud` CLI logged
+in locally; Render needs neither — connect the GitHub repo, done. That tradeoff (a 30–60s cold
+start after 15 minutes idle vs. an extra account-verification step) is exactly the kind of
+call the assessment says is the candidate's to make and justify — here, avoiding the billing
+dependency won out. Paired with Vercel for the frontend for the same reason: no card, deploys
+straight from the same GitHub repo.
 
 **5. Lazy secret validation instead of required environment variables at startup.**
 `Settings.gemini_api_key` and the Firebase service-account path both default to empty/unset
@@ -235,53 +236,45 @@ bonus, reuses existing verification data), frontend tests, then caching/rate-lim
 
 ## Deployment
 
-### Backend — Cloud Run
+Backend on **Render**, frontend on **Vercel** — chosen over Cloud Run/Firebase Hosting
+specifically to avoid needing a GCP billing account or the `gcloud` CLI; both platforms deploy
+straight from the GitHub repo with no card and no local CLI login. The tradeoff is Render's
+free tier sleeps after 15 minutes idle (30–60s cold start on the next request) — expected
+behavior, not a bug, worth knowing if the app looks slow on a fresh check.
 
-```bash
-cd backend
-gcloud run deploy note-insight-api \
-  --source . \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --set-env-vars GEMINI_MODEL=gemini-3.6-flash,CORS_ALLOW_ORIGINS=https://YOUR_FIREBASE_PROJECT_ID.web.app
-```
+### Backend — Render
 
-Set `GEMINI_API_KEY` as a secret rather than a plain env var:
+A `render.yaml` blueprint is at the repo root, so this is mostly point-and-click:
 
-```bash
-gcloud secrets create gemini-api-key --data-file=- <<< "YOUR_KEY"
-gcloud run services update note-insight-api --update-secrets=GEMINI_API_KEY=gemini-api-key:latest
-```
+1. [render.com](https://render.com) → **New → Blueprint** → connect the `note_insight` GitHub
+   repo. Render reads `render.yaml` and proposes the `note-insight-api` web service
+   automatically (root dir `backend`, build/start commands already set).
+2. Before the first deploy, set the two secret env vars it left blank:
+   - `GEMINI_API_KEY` — your key
+   - `CORS_ALLOW_ORIGINS` — the Vercel URL from the frontend step below (comma-separate if you
+     also want `localhost:5173` for local testing against the deployed backend)
+3. **Environment → Secret Files** → add a file named exactly `serviceAccountKey.json` (path
+   `/etc/secrets/serviceAccountKey.json`, which is what `FIREBASE_SERVICE_ACCOUNT_PATH` in
+   `render.yaml` already points at) → paste the contents of your local
+   `backend/serviceAccountKey.json`.
+4. Deploy. Note the resulting `https://note-insight-api-xxxx.onrender.com` URL — the frontend
+   needs it next.
 
-Upload the Firebase service account JSON as a secret too (`FIREBASE_SERVICE_ACCOUNT_PATH`
-should then point at wherever Cloud Run mounts it), or use Application Default Credentials by
-granting the Cloud Run service account the `Firebase Admin` IAM role instead of shipping a key
-file at all — the latter is the better long-term answer and is what I'd switch to with more
-time.
+### Frontend — Vercel
 
-**`us-central1`, `us-east1`, or `us-west1`** specifically — Cloud Run's always-free quota only
-applies in those regions.
+The repo is a monorepo (`frontend/` and `backend/` as siblings), so Vercel needs to be told
+where the frontend actually lives:
 
-### Frontend — Firebase Hosting
-
-```bash
-npm install -g firebase-tools
-firebase login
-# edit .firebaserc: replace YOUR_FIREBASE_PROJECT_ID with your real project id
-
-cd frontend
-npm run build
-cd ..
-firebase deploy --only hosting
-```
-
-### Fallback backend host — Render
-
-If avoiding a GCP billing account matters more than avoiding cold starts: connect the repo at
-render.com, set the root directory to `backend`, build command `pip install -r
-requirements.txt`, start command `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, and add
-the same env vars/secrets as above. Free tier sleeps after 15 minutes idle — the first request
-after a gap takes 30–60 seconds; this is expected, not a bug.
+1. [vercel.com](https://vercel.com) → **Add New → Project** → import the `note_insight` repo.
+2. **Root Directory** → set to `frontend` (Vercel then auto-detects the Vite framework preset;
+   no `vercel.json` needed).
+3. **Environment Variables** → add all 6 `VITE_FIREBASE_*` values from `frontend/.env.example`,
+   plus `VITE_API_BASE_URL` set to the Render URL from step 4 above.
+4. Deploy. Note the resulting `https://note-insight-xxxx.vercel.app` URL.
+5. Go back to Render and update `CORS_ALLOW_ORIGINS` to this exact Vercel URL, then redeploy the
+   backend (env var changes on Render require a redeploy to take effect) — until this matches,
+   the deployed frontend's requests will be rejected by CORS even though everything else is
+   correctly configured.
 
 ---
 
