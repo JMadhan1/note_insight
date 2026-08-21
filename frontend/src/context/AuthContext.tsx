@@ -1,19 +1,24 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
+  GoogleAuthProvider,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut as firebaseSignOut,
 } from "firebase/auth";
 import type { User } from "firebase/auth";
 import { auth } from "../firebase";
+
+const googleProvider = new GoogleAuthProvider();
 
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
   signUp: (email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -39,6 +44,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     signIn: async (email, password) => {
       await signInWithEmailAndPassword(auth, email, password);
+    },
+    signInWithGoogle: async () => {
+      await signInWithPopup(auth, googleProvider);
     },
     signOut: async () => {
       await firebaseSignOut(auth);
