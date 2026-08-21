@@ -1,101 +1,201 @@
 # Note Insight
 
-A tool that turns a clinician's free-text visit note into a structured, schema-validated
-analysis (conditions, evidence, documentation gaps, suggested ICD-10 codes) within seconds,
-with every AI extraction traceable back to the source text and every human correction
-preserved alongside the model's original output.
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-Python%203.11-009688?logo=fastapi&logoColor=white)
+![Gemini](https://img.shields.io/badge/Gemini-3.6--flash-8E75B2)
+![Firebase](https://img.shields.io/badge/Firebase-Auth%20%2B%20Firestore-FFCA28?logo=firebase&logoColor=black)
+
+**Paste a clinical note in, get a coder-ready structured analysis back in under a minute.**
+
+Dr. Marina Ríos sees 20+ patients a day and writes a free-text note after each visit. Today
+that note sits untouched for days before a coder reads it, queries her about what she meant,
+and by then she's forgotten the patient. Note Insight closes that gap: it extracts conditions,
+quotes the exact evidence for each one, flags documentation gaps, and suggests ICD-10 codes —
+while the patient is still fresh in her mind, and with every AI claim checked against the
+source text so it's never trusted blindly.
 
 Built for the DoctusTech Junior Full-Stack / AI Engineer technical assessment. See
-[PROJECT_PLAN.md](PROJECT_PLAN.md) for the phase-by-phase build plan this repo followed.
+[PROJECT_PLAN.md](PROJECT_PLAN.md) for the phase-by-phase plan this repo followed.
 
 ---
 
 ## Contents
 
-- [How to run it locally](#how-to-run-it-locally)
+- [Quickstart](#quickstart)
+- [Architecture](#architecture)
+- [What it does](#what-it-does)
 - [Data model](#data-model)
 - [Design decisions](#design-decisions)
-- [What I'd build next / what's left unfinished](#whatd-i-build-next--whats-left-unfinished)
+- [Testing](#testing)
+- [What's left unfinished](#whats-left-unfinished)
 - [Deployment](#deployment)
-- [Prompt](#prompt)
-- [Sample notes](#sample-notes)
+- [Project structure](#project-structure)
+- [Prompt & sample notes](#prompt--sample-notes)
 - [Time spent](#time-spent)
 
 ---
 
-## How to run it locally
+## Quickstart
 
-Requires Node.js 20+, Python 3.11+, and a Firebase project (free Spark plan — no card
-required) with **Authentication** (email/password provider enabled) and **Firestore**
-(production mode) turned on, plus a **Gemini API key** from
-[aistudio.google.com/apikey](https://aistudio.google.com/apikey).
+Five things, in order, and you're running locally. No prior familiarity with this repo needed.
 
-### 1. Backend
+**You'll need:** Node.js 20+, Python 3.11+, a free [Firebase](https://console.firebase.google.com)
+project, and a free [Gemini API key](https://aistudio.google.com/apikey). None of it costs
+money — Firebase's Spark plan needs no card, and the Gemini free tier is enough for this.
+
+### 1 · Firebase setup (~2 minutes)
+
+In the [Firebase console](https://console.firebase.google.com): create a project → **Build →
+Authentication → Get started → Email/Password → Enable** → **Build → Firestore Database →
+Create database → Production mode**.
+
+### 2 · Backend
 
 ```bash
 cd backend
 python -m venv .venv
-source .venv/Scripts/activate   # Windows Git Bash; use .venv\Scripts\activate on cmd/PowerShell
+source .venv/Scripts/activate      # Windows Git Bash; .venv\Scripts\activate on cmd/PowerShell
 pip install -r requirements.txt
 
 cp .env.example .env
-# Edit .env: paste your GEMINI_API_KEY
+# → paste your GEMINI_API_KEY into .env
 
-# Firebase console > Project settings > Service accounts > Generate new private key
-# Save the downloaded file as backend/serviceAccountKey.json (gitignored, never commit it)
+# Firebase console → Project settings → Service accounts → Generate new private key
+# → save the download as backend/serviceAccountKey.json (gitignored, never committed)
 
 uvicorn app.main:app --reload --port 8000
 ```
 
-Visit `http://localhost:8000/health` — should return `{"status": "ok"}`. This works even
-before the Gemini key or Firebase service account are in place; both are only required the
-moment a route that actually needs them is called (`/notes` needs both, `/health` needs
-neither) — see [Design decisions](#design-decisions).
+Check `http://localhost:8000/health` → `{"status": "ok"}`. This works even before your Gemini
+key or service account exist — see [design decision #5](#design-decisions) for why.
 
-Run the test suite:
-
-```bash
-cd backend
-pytest
-```
-
-### 2. Frontend
+### 3 · Frontend
 
 ```bash
 cd frontend
 npm install
 
 cp .env.example .env
-# Firebase console > Project settings > General > Your apps > Web app > SDK config
-# Paste each value into .env
+# Firebase console → Project settings → General → Your apps → </> web icon → SDK config
+# → paste the 6 values into .env
 
 npm run dev
 ```
 
-Visit `http://localhost:5173`. Sign up with any email/password (Firebase Auth handles this —
-no separate backend user table).
+### 4 · Try it
+
+Open `http://localhost:5173` → sign up with any email/password → paste one of the notes from
+[`sample_notes/`](sample_notes/) → watch it come back structured in a few seconds.
+
+### 5 · Run the tests (optional but satisfying)
+
+```bash
+cd backend && pytest -q
+# 31 passed
+```
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Client["Client — Vercel"]
+        UI["React + TypeScript SPA"]
+    end
+
+    subgraph FirebaseCloud["Firebase"]
+        FBAuth[("Firebase Auth")]
+        FS[("Firestore")]
+    end
+
+    subgraph Backend["Backend — Render"]
+        API["FastAPI"]
+    end
+
+    Gemini[("Google Gemini API")]
+
+    UI -- "1 . sign in" --> FBAuth
+    UI -- "2 . POST /notes + Bearer token" --> API
+    API -- "3 . verify_id_token" --> FBAuth
+    API -- "4 . schema-constrained prompt" --> Gemini
+    Gemini -- "5 . structured JSON" --> API
+    API -- "6 . quote-verified analysis" --> FS
+    API -- "7 . typed response" --> UI
+
+    classDef client fill:#6d3bff,stroke:#4823b8,color:#ffffff,stroke-width:2px
+    classDef backend fill:#0f9488,stroke:#0c7a70,color:#ffffff,stroke-width:2px
+    classDef firebase fill:#f0ac4d,stroke:#b45309,color:#1c1a26,stroke-width:2px
+    classDef ai fill:#be123c,stroke:#9f1032,color:#ffffff,stroke-width:2px
+
+    class UI client
+    class API backend
+    class FBAuth,FS firebase
+    class Gemini ai
+```
+
+The frontend never talks to Firestore or Gemini directly — every request goes through FastAPI,
+which is the only thing holding the Gemini key and the only thing that verifies the Firebase ID
+token before touching any data. Step 6 is where the quote-verification pass happens: Gemini's
+response is validated against a Pydantic schema, then every `evidence_quote` is checked as a
+literal substring of the original note before anything is stored.
+
+---
+
+## What it does
+
+| | |
+|---|---|
+| **Schema-constrained AI output** | Gemini's `response_schema` returns a Pydantic-validated object directly — no regex, no hoping the model returned clean JSON |
+| **Hallucination-checked evidence** | Every quoted excerpt is verified as a literal (normalized) substring of the note; a quote that doesn't match is flagged `unverified`, not silently dropped |
+| **Human review, fully preserved** | Edit, reject, or add conditions — the original AI output is never overwritten, only shadowed by a separate `review` object |
+| **Per-user data isolation** | Firestore paths are rooted at the caller's *verified* uid, not a client-supplied field — structurally enforced and tested, not just policed by convention |
+| **Google + email/password auth** | Firebase Authentication, both providers wired and working |
+| **Graceful failure, not silence** | A note is never lost — a failed analysis is stored with its error rather than the request just disappearing |
+| **31 automated tests** | Schema validation, quote verification, Gemini retry/failure paths, and cross-user isolation, all covered |
 
 ---
 
 ## Data model
 
-Firestore, chosen over Postgres/SQLite for three reasons: it needs no card on the free
-(Spark) plan, it shares one credential/SDK surface with Firebase Auth (the same project, the
-same UID space), and its collection-per-parent query model maps directly onto "all notes for
-user X, newest first" — see below. The tradeoff is less flexible ad-hoc querying than SQL,
-which doesn't matter here since every query this product needs is "one user's notes, or one
-note's analyses."
+```mermaid
+flowchart TD
+    User["Firebase Auth user (uid)"]
+    Note["Note<br/>users/{uid}/notes/{noteId}"]
+    Analysis["Analysis<br/>.../notes/{noteId}/analyses/{analysisId}"]
+    AIOutput["aiOutput<br/>frozen — written once by Gemini"]
+    Review["review<br/>human-edited — null until reviewed"]
 
-Four distinct entities — deliberately not collapsed into one document, per the assessment's
-own warning that doing so "will cause you problems by day three":
+    User --> Note
+    Note -- "1 note : many analyses<br/>re-analysis never overwrites" --> Analysis
+    Analysis --> AIOutput
+    Analysis --> Review
 
+    classDef user fill:#6d3bff,stroke:#4823b8,color:#ffffff,stroke-width:2px
+    classDef note fill:#0f9488,stroke:#0c7a70,color:#ffffff,stroke-width:2px
+    classDef analysis fill:#f0ac4d,stroke:#b45309,color:#1c1a26,stroke-width:2px
+    classDef frozen fill:#be123c,stroke:#9f1032,color:#ffffff,stroke-width:2px
+    classDef review fill:#3ddac8,stroke:#0c7a70,color:#1c1a26,stroke-width:2px
+
+    class User user
+    class Note note
+    class Analysis analysis
+    class AIOutput frozen
+    class Review review
 ```
-Firebase Auth user (uid)          — not a Firestore document; Firestore paths are keyed by it
-  └── users/{uid}/notes/{noteId}                              — what the clinician pasted, immutable
-        └── .../notes/{noteId}/analyses/{analysisId}          — one per LLM run
-              ├── aiOutput   — frozen the moment Gemini responds; never edited again
-              └── review     — the human-corrected version, layered on top; null until reviewed
-```
+
+Firestore, chosen over Postgres/SQLite for three reasons: it needs no card on the free (Spark)
+plan, it shares one credential/SDK surface with Firebase Auth (same project, same uid space),
+and its collection-per-parent query model maps directly onto "all notes for user X, newest
+first." The tradeoff is less flexible ad-hoc querying than SQL — a non-issue here, since every
+query this product needs is "one user's notes" or "one note's analyses."
+
+Four distinct entities, deliberately not collapsed into one document — the assessment's own
+warning that doing so "will cause you problems by day three."
+
+<details>
+<summary><strong>Full reasoning: why subcollections, why two separate objects, who writes what</strong></summary>
 
 **Why subcollections, not a flat "one analysis per note" document**: this directly answers the
 assessment's own test question — "what happens when the same note is analyzed twice, e.g.
@@ -142,11 +242,16 @@ orchestration logic have to live server-side. It means Firestore *security rules
 enforcement layer here (the Admin SDK bypasses them); the enforcement is the uid-scoped path
 construction described above, gated by server-side ID token verification.
 
+</details>
+
 ---
 
 ## Design decisions
 
-**1. Gemini's native `response_schema` instead of prompting for JSON and parsing it.**
+<details open>
+<summary><strong>1. Gemini's native <code>response_schema</code> instead of prompting for JSON and parsing it</strong></summary>
+<br>
+
 `google-genai`'s `GenerateContentConfig(response_mime_type="application/json",
 response_schema=AIAnalysisOutput)` constrains the model's output at generation time and hands
 back an object already validated against the Pydantic model (`response.parsed`). The
@@ -155,17 +260,25 @@ exactly what the assessment says will be marked down, and in practice it's also 
 reliable. The cost is being tied to a Gemini SDK feature; if a second provider were added
 later (Claude, GPT), the schema and the verification/retry logic in `gemini_service.py` would
 carry over unchanged, only the API call itself would need a provider-specific adapter.
+</details>
 
-**2. Retry once on schema-invalid output, then fail explicitly rather than looping or
-guessing.** `run_analysis()` in `backend/app/gemini_service.py` gives the model one more
-attempt with an explicit "your last response didn't match the schema" follow-up, then raises
+<details>
+<summary><strong>2. Retry once on schema-invalid output, then fail explicitly rather than looping or guessing</strong></summary>
+<br>
+
+`run_analysis()` in `backend/app/gemini_service.py` gives the model one more attempt with an
+explicit "your last response didn't match the schema" follow-up, then raises
 `AnalysisFailure`. The alternative was either silently retrying indefinitely (masks a
 systemic prompt problem behind latency) or failing on the first bad response (throws away a
 cheap, often-successful second attempt). The route handler (`routers/notes.py`) then stores a
 `status: "failed"` analysis with the error preserved, rather than losing the note — the
 clinician's note is never dropped just because the model had a bad response.
+</details>
 
-**3. Normalized substring matching to verify evidence quotes, surfaced rather than hidden.**
+<details>
+<summary><strong>3. Normalized substring matching to verify evidence quotes, surfaced rather than hidden</strong></summary>
+<br>
+
 `verify_quote()` lowercases, collapses whitespace, and strips punctuation before checking that
 a claimed quote is a literal substring of the note — tolerant of trivial formatting
 differences, strict about actual content. A condition whose quote fails this check is not
@@ -175,10 +288,14 @@ goes exactly where the model's claim is weakest. This is the concrete answer to 
 know the model didn't make this up?" — tested in `test_quote_verification.py` and
 `test_gemini_service.py`, including a deliberate false-positive check (`"diabetes"` must not
 match `"diabetic"`).
+</details>
 
-**4. Render over Fly.io/Railway/Cloud Run for the backend, despite the assessment listing all
-four.** Fly.io removed free allowances for new accounts in 2024, and Railway's "free" plan is
-now a one-time $5 credit that expires in 30 days — neither is durable hosting. Cloud Run's
+<details>
+<summary><strong>4. Render over Fly.io/Railway/Cloud Run for the backend, despite the assessment listing all four</strong></summary>
+<br>
+
+Fly.io removed free allowances for new accounts in 2024, and Railway's "free" plan is now a
+one-time $5 credit that expires in 30 days — neither is durable hosting. Cloud Run's
 always-free quota (2M requests/month) is genuinely free and would avoid Render's cold-start
 tradeoff entirely, but it requires a GCP billing account on file and the `gcloud` CLI logged
 in locally; Render needs neither — connect the GitHub repo, done. That tradeoff (a 30–60s cold
@@ -186,16 +303,24 @@ start after 15 minutes idle vs. an extra account-verification step) is exactly t
 call the assessment says is the candidate's to make and justify — here, avoiding the billing
 dependency won out. Paired with Vercel for the frontend for the same reason: no card, deploys
 straight from the same GitHub repo.
+</details>
 
-**5. Lazy secret validation instead of required environment variables at startup.**
+<details>
+<summary><strong>5. Lazy secret validation instead of required environment variables at startup</strong></summary>
+<br>
+
 `Settings.gemini_api_key` and the Firebase service-account path both default to empty/unset
 rather than being required fields — `app/config.py` and `app/auth.py` only raise once a route
 that actually needs the secret is called. This was a practical necessity while building ahead
 of receiving real credentials (the app, `/health`, and 20+ tests all had to run without them),
 but it also means a misconfigured deploy fails on `/notes`, not by refusing to boot at all —
 worth knowing if `/health` ever looks fine while nothing else works.
+</details>
 
-**6. Firestore uses explicit service-account credentials, not `google.auth.default()`.**
+<details>
+<summary><strong>6. Firestore uses explicit service-account credentials, not <code>google.auth.default()</code></strong></summary>
+<br>
+
 `firestore.Client()` with no arguments relies on Application Default Credentials, which only
 exist automatically on GCP infrastructure (or after `gcloud auth application-default login`
 locally) — running it as-written against a real project surfaced this immediately as a
@@ -204,17 +329,37 @@ the same service-account file already required for Firebase Admin
 (`google.oauth2.service_account.Credentials.from_service_account_file(...)`), so there's one
 secret to configure locally, not two, and no assumption that the app is running somewhere with
 ADC pre-wired.
+</details>
 
 ---
 
-## What'd I build next / what's left unfinished
+## Testing
+
+```bash
+cd backend
+pytest -q
+```
+
+31 tests across 5 files, all passing, no live network calls (Gemini and Firestore are mocked):
+
+| File | Covers |
+|---|---|
+| `test_schema_validation.py` | Pydantic rejects out-of-range confidence, invalid enum values, blank/oversized notes |
+| `test_quote_verification.py` | Real matches, false positives (`"diabetes"` ≠ `"diabetic"`), whitespace/punctuation tolerance |
+| `test_gemini_service.py` | Retry-then-succeed, retry-then-fail, unverified-quote flagging on a real Gemini response shape |
+| `test_firestore_isolation.py` | Every data-access path is structurally rooted at the caller's uid |
+| `test_notes_router.py` | Full HTTP layer: auth requirement, 404 on cross-user access, failed analysis stored (not a 500) |
+
+Beyond the automated suite, the entire flow — signup, real Gemini analysis, edit/reject/add,
+save, reload, history — has been run live against a real Firebase project and a real Gemini
+key, not just against mocks.
+
+---
+
+## What's left unfinished
 
 Left unfinished, deliberately, in favor of getting the core loop solid end to end:
 
-- **No automated frontend tests.** Backend has 23 tests covering schema validation, quote
-  verification, the Gemini retry/failure path, and uid-scoped data isolation; the frontend has
-  none. Given more time, component tests for `AnalysisPage`'s review-diff logic (the
-  `source: ai → human_edited` transition) would be the highest-value addition.
 - **No re-analysis flow in the UI.** The data model supports multiple analyses per note (see
   above) and the backend has no obstacle to a "re-analyze with the current prompt" button, but
   no route or UI exists for triggering it yet — a note can only be analyzed once from the
@@ -226,6 +371,9 @@ Left unfinished, deliberately, in favor of getting the core loop solid end to en
 - **No inline evidence-quote highlighting in the original note text** — the `quote_verified`
   flag and the `evidence_quote` field are already in the data returned to the frontend, so this
   is a rendering task (splitting the note text around matched spans), not a data-model change.
+- **No component-level frontend tests** — the backend has 31; the frontend has been verified by
+  hand, live, repeatedly, but not with an automated suite. The highest-value addition here
+  would be `AnalysisPage`'s review-diff logic (the `source: ai → human_edited` transition).
 - **ICD-10 codes are exactly as approximate as the assessment says is acceptable** — no lookup
   against a real coding table, per the brief's explicit note that this isn't being evaluated.
 
@@ -278,22 +426,53 @@ where the frontend actually lives:
 
 ---
 
-## Prompt
+## Project structure
+
+```
+note_insight/
+├── backend/                       FastAPI service
+│   ├── app/
+│   │   ├── main.py                 App entrypoint, CORS, route registration
+│   │   ├── auth.py                 Firebase ID token verification (lazy-initialized)
+│   │   ├── config.py                Env-based settings, secrets validated on first use
+│   │   ├── models.py                Pydantic schemas — the AI output contract + API contract
+│   │   ├── gemini_service.py        Schema-constrained Gemini calls, retry, quote verification
+│   │   ├── firestore_service.py     uid-scoped data access layer
+│   │   ├── prompts/
+│   │   │   └── note_analysis_prompt.py   The actual prompt sent to Gemini
+│   │   └── routers/
+│   │       ├── health.py            GET /health
+│   │       └── notes.py             POST /notes, GET /notes, review endpoint
+│   └── tests/                       31 tests: schema, quotes, retries, isolation, HTTP layer
+├── frontend/                       React + TypeScript (Vite)
+│   └── src/
+│       ├── pages/                   AuthPage, NoteSubmitPage, AnalysisPage, HistoryPage
+│       ├── components/              AppShell (sidebar layout), hand-rolled icon set
+│       ├── context/                 AuthContext — Firebase auth state
+│       ├── api/                     Typed fetch client mirroring the backend contract
+│       └── types/                   TypeScript types mirroring the Pydantic models
+├── sample_notes/                   3 synthetic clinical notes to try the product with
+├── render.yaml                     Render deploy blueprint (backend)
+└── PROJECT_PLAN.md                 The phase-by-phase plan this repo followed
+```
+
+---
+
+## Prompt & sample notes
 
 The full prompt sent to Gemini lives in
 [`backend/app/prompts/note_analysis_prompt.py`](backend/app/prompts/note_analysis_prompt.py),
 versioned via `PROMPT_VERSION` and stored on every analysis document so old and new analyses
 of the same note stay individually attributable to the prompt that produced them.
 
-## Sample notes
-
 Three synthetic notes in [`sample_notes/`](sample_notes/) — no real patient data anywhere in
 this repo:
 
-- `01_well_documented.txt` — both conditions fully documented, tests the "well_documented" path.
-- `02_ambiguous_underdocumented.txt` — diabetes without type/control status, a medication with
-  no stated diagnosis, tests the documentation-gap detection this product exists for.
-- `03_minimal_edge_case.txt` — no clinical content at all, tests the empty-conditions path.
+| File | What it tests |
+|---|---|
+| `01_well_documented.txt` | Both conditions fully documented — the `well_documented` path |
+| `02_ambiguous_underdocumented.txt` | Diabetes without type/control status, a medication with no stated diagnosis — the documentation-gap detection this product exists for |
+| `03_minimal_edge_case.txt` | No clinical content at all — the empty-conditions path |
 
 ## Time spent
 
