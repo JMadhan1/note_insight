@@ -13,7 +13,9 @@ See PROJECT_PLAN.md section 0.2/0.3 for the full reasoning.
 from datetime import datetime, timezone
 
 from google.cloud import firestore
+from google.oauth2 import service_account
 
+from .config import get_settings
 from .models import (
     AnalysisResponse,
     AnalysisStatus,
@@ -29,9 +31,18 @@ _db: firestore.Client | None = None
 
 
 def get_db() -> firestore.Client:
+    """Lazy init, same pattern as auth.py: reuses the same service-account file
+    already required for Firebase Admin, so there's one secret to configure, not
+    two. Explicit credentials rather than google.auth.default() — this app never
+    assumes it's running somewhere with Application Default Credentials set up
+    (it isn't, locally)."""
     global _db
     if _db is None:
-        _db = firestore.Client()
+        settings = get_settings()
+        credentials = service_account.Credentials.from_service_account_file(
+            settings.firebase_service_account_path
+        )
+        _db = firestore.Client(project=credentials.project_id, credentials=credentials)
     return _db
 
 

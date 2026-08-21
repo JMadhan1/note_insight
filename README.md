@@ -194,6 +194,16 @@ of receiving real credentials (the app, `/health`, and 20+ tests all had to run 
 but it also means a misconfigured deploy fails on `/notes`, not by refusing to boot at all —
 worth knowing if `/health` ever looks fine while nothing else works.
 
+**6. Firestore uses explicit service-account credentials, not `google.auth.default()`.**
+`firestore.Client()` with no arguments relies on Application Default Credentials, which only
+exist automatically on GCP infrastructure (or after `gcloud auth application-default login`
+locally) — running it as-written against a real project surfaced this immediately as a
+`DefaultCredentialsError`. `firestore_service.get_db()` now builds credentials explicitly from
+the same service-account file already required for Firebase Admin
+(`google.oauth2.service_account.Credentials.from_service_account_file(...)`), so there's one
+secret to configure locally, not two, and no assumption that the app is running somewhere with
+ADC pre-wired.
+
 ---
 
 ## What'd I build next / what's left unfinished
@@ -233,7 +243,7 @@ gcloud run deploy note-insight-api \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars GEMINI_MODEL=gemini-2.5-flash,CORS_ALLOW_ORIGINS=https://YOUR_FIREBASE_PROJECT_ID.web.app
+  --set-env-vars GEMINI_MODEL=gemini-3.6-flash,CORS_ALLOW_ORIGINS=https://YOUR_FIREBASE_PROJECT_ID.web.app
 ```
 
 Set `GEMINI_API_KEY` as a secret rather than a plain env var:
