@@ -29,10 +29,10 @@ export function AppShell() {
         </div>
 
         <nav className="sidebar-nav">
-          <NavLink to="/" end className={navLinkClass}>
+          <NavLink to="/app" end className={navLinkClass}>
             <NewNoteIcon /> New note
           </NavLink>
-          <NavLink to="/history" className={navLinkClass}>
+          <NavLink to="/app/history" className={navLinkClass}>
             <HistoryIcon /> History
           </NavLink>
         </nav>

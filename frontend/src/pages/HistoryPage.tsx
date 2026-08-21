@@ -46,7 +46,7 @@ export function HistoryPage() {
         <div className="empty-state">
           <HistoryIcon size={28} />
           <p style={{ marginTop: 12 }}>
-            No notes analyzed yet. <Link to="/">Analyze your first note</Link>.
+            No notes analyzed yet. <Link to="/app">Analyze your first note</Link>.
           </p>
         </div>
       ) : (
@@ -64,7 +64,7 @@ export function HistoryPage() {
               <tr key={note.id}>
                 <td>
                   {note.latest_analysis_id ? (
-                    <Link to={`/notes/${note.id}/analyses/${note.latest_analysis_id}`}>
+                    <Link to={`/app/notes/${note.id}/analyses/${note.latest_analysis_id}`}>
                       {new Date(note.created_at).toLocaleString()}
                     </Link>
                   ) : (

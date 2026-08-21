@@ -32,7 +32,7 @@ export function AuthPage() {
       } else {
         await signIn(email, password);
       }
-      navigate("/", { replace: true });
+      navigate("/app", { replace: true });
     } catch (err) {
       setState("error");
       setErrorMessage(err instanceof Error ? err.message : "Something went wrong");
@@ -44,7 +44,7 @@ export function AuthPage() {
     setErrorMessage("");
     try {
       await signInWithGoogle();
-      navigate("/", { replace: true });
+      navigate("/app", { replace: true });
     } catch (err) {
       setState("error");
       setErrorMessage(err instanceof Error ? err.message : "Google sign-in failed");

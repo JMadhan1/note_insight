@@ -38,7 +38,7 @@ export function NoteSubmitPage() {
         pseudonym: pseudonym.trim() || null,
         visit_date: visitDate || null,
       });
-      navigate(`/notes/${result.note.id}/analyses/${result.analysis.id}`);
+      navigate(`/app/notes/${result.note.id}/analyses/${result.analysis.id}`);
     } catch (err) {
       setState("error");
       setError(err instanceof ApiError ? err.message : "Could not reach the server. Try again.");
