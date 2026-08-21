@@ -26,7 +26,15 @@ def get_current_uid(
     if creds is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
 
-    _init_firebase_app()
+    try:
+        _init_firebase_app()
+    except Exception as exc:
+        # Missing/malformed service-account file — a server misconfiguration, not a bad
+        # token, so it gets its own status code rather than masquerading as a 401.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service is not configured correctly",
+        ) from exc
 
     try:
         decoded = firebase_auth.verify_id_token(creds.credentials)
