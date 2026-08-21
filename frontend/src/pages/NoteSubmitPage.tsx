@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { submitNote } from "../api/notes";
 import { ApiError } from "../api/client";
+import { SparkleIcon } from "../components/icons";
 
 type SubmitState = "idle" | "submitting" | "error";
 
@@ -46,48 +47,64 @@ export function NoteSubmitPage() {
 
   return (
     <div className="page">
-      <h1>New note</h1>
-      <form onSubmit={handleSubmit} className="note-form">
-        <div className="field-row">
-          <div>
-            <label htmlFor="pseudonym">Patient pseudonym (optional)</label>
-            <input
-              id="pseudonym"
-              value={pseudonym}
-              onChange={(e) => setPseudonym(e.target.value)}
-              placeholder="e.g. P-014 — never a real identifier"
-            />
-          </div>
-          <div>
-            <label htmlFor="visitDate">Visit date (optional)</label>
-            <input
-              id="visitDate"
-              type="date"
-              value={visitDate}
-              onChange={(e) => setVisitDate(e.target.value)}
-            />
-          </div>
+      <p className="page-eyebrow">New encounter</p>
+      <h1>Analyze a clinical note</h1>
+      <p className="page-intro">
+        Paste the note as written — the model reads it exactly as-is, no formatting required.
+      </p>
+
+      <div className="note-card">
+        <div className="note-hint">
+          <SparkleIcon />
+          <span>
+            You'll get conditions with quoted evidence, a documentation-quality flag per
+            condition, suggested ICD-10 codes and any gaps a coder would flag — all editable
+            before it's saved.
+          </span>
         </div>
 
-        <label htmlFor="noteText">Clinical note</label>
-        <textarea
-          id="noteText"
-          rows={16}
-          value={noteText}
-          onChange={(e) => setNoteText(e.target.value)}
-          placeholder="Paste the free-text clinical note here…"
-          required
-        />
-        <div className={overLimit ? "word-count word-count-over" : "word-count"}>
-          {words} words{overLimit ? " — over the 3000 word limit" : ""}
-        </div>
+        <form onSubmit={handleSubmit} className="note-form">
+          <div className="field-row">
+            <div>
+              <label htmlFor="pseudonym">Patient pseudonym (optional)</label>
+              <input
+                id="pseudonym"
+                value={pseudonym}
+                onChange={(e) => setPseudonym(e.target.value)}
+                placeholder="e.g. P-014 — never a real identifier"
+              />
+            </div>
+            <div>
+              <label htmlFor="visitDate">Visit date (optional)</label>
+              <input
+                id="visitDate"
+                type="date"
+                value={visitDate}
+                onChange={(e) => setVisitDate(e.target.value)}
+              />
+            </div>
+          </div>
 
-        {state === "error" && <p className="form-error">{error}</p>}
+          <label htmlFor="noteText">Clinical note</label>
+          <textarea
+            id="noteText"
+            rows={16}
+            value={noteText}
+            onChange={(e) => setNoteText(e.target.value)}
+            placeholder="Paste the free-text clinical note here…"
+            required
+          />
+          <div className={overLimit ? "word-count word-count-over" : "word-count"}>
+            {words} words{overLimit ? " — over the 3000 word limit" : ""}
+          </div>
 
-        <button type="submit" disabled={!canSubmit}>
-          {state === "submitting" ? "Analyzing… this can take a few seconds" : "Analyze note"}
-        </button>
-      </form>
+          {state === "error" && <p className="form-error">{error}</p>}
+
+          <button type="submit" disabled={!canSubmit}>
+            {state === "submitting" ? "Analyzing… this can take a few seconds" : "Analyze note"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

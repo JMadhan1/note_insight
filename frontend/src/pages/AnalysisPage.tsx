@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { getAnalysis, submitReview } from "../api/notes";
 import type { AnalysisResponse, StoredAnalysisOutput, StoredCondition } from "../types/api";
+import { AlertTriangleIcon, CheckCircleIcon, UnverifiedIcon } from "../components/icons";
 
 type LoadState = "loading" | "loaded" | "error";
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -96,7 +97,7 @@ export function AnalysisPage() {
     }
   }
 
-  if (loadState === "loading") return <div className="page">Loading analysis…</div>;
+  if (loadState === "loading") return <div className="page-loading">Loading analysis…</div>;
 
   if (loadState === "error" || !analysis) {
     return (
@@ -109,11 +110,14 @@ export function AnalysisPage() {
   if (analysis.status === "failed") {
     return (
       <div className="page">
-        <h1>Analysis failed</h1>
+        <p className="page-eyebrow">Analysis</p>
+        <h1>This one didn't come back clean</h1>
         <p className="form-error">
           {analysis.error_message ?? "The model could not produce a valid, schema-conforming result."}
         </p>
-        <p>Your note was saved even though the analysis failed — nothing was lost.</p>
+        <p className="muted" style={{ marginTop: 12 }}>
+          Your note was saved even though the analysis failed — nothing was lost.
+        </p>
       </div>
     );
   }
@@ -122,22 +126,28 @@ export function AnalysisPage() {
 
   return (
     <div className="page">
-      <h1>Analysis</h1>
-      <p className="meta-line">
-        Model: {analysis.model_version} · Prompt: {analysis.prompt_version} ·{" "}
-        {analysis.review_status === "reviewed" ? "Reviewed" : "Pending review"}
+      <p className="page-eyebrow">Analysis</p>
+      <h1>Review &amp; correct</h1>
+      <p className="analysis-meta">
+        <span>{analysis.model_version}</span>
+        <span>·</span>
+        <span>prompt {analysis.prompt_version}</span>
+        <span>·</span>
+        <span className={`status-pill status-${analysis.review_status}`}>{analysis.review_status}</span>
       </p>
 
       <section>
         <h2>Summary</h2>
-        <textarea
-          value={draft.summary}
-          onChange={(e) => {
-            setDraft((prev) => (prev ? { ...prev, summary: e.target.value } : prev));
-            setSaveState("idle");
-          }}
-          rows={3}
-        />
+        <div className="summary-card">
+          <textarea
+            value={draft.summary}
+            onChange={(e) => {
+              setDraft((prev) => (prev ? { ...prev, summary: e.target.value } : prev));
+              setSaveState("idle");
+            }}
+            rows={3}
+          />
+        </div>
       </section>
 
       <section>
@@ -146,6 +156,7 @@ export function AnalysisPage() {
           <div
             key={i}
             className={condition.rejected ? "condition-card condition-rejected" : "condition-card"}
+            data-status={condition.documentation_status}
           >
             <div className="condition-header">
               <input
@@ -157,7 +168,7 @@ export function AnalysisPage() {
               <span className={`source-badge source-${condition.source}`}>{sourceLabel(condition.source)}</span>
               {!condition.quote_verified && (
                 <span className="unverified-badge" title="This quote could not be matched verbatim in the note">
-                  unverified quote
+                  <UnverifiedIcon /> unverified quote
                 </span>
               )}
             </div>
@@ -217,9 +228,12 @@ export function AnalysisPage() {
         {draft.documentation_gaps.length === 0 ? (
           <p className="muted">No gaps flagged.</p>
         ) : (
-          <ul>
+          <ul className="gap-list">
             {draft.documentation_gaps.map((gap, i) => (
-              <li key={i}>{gap}</li>
+              <li className="gap-item" key={i}>
+                <AlertTriangleIcon />
+                <span>{gap}</span>
+              </li>
             ))}
           </ul>
         )}
@@ -229,7 +243,11 @@ export function AnalysisPage() {
         <button type="button" onClick={saveReview} disabled={saveState === "saving"}>
           {saveState === "saving" ? "Saving…" : "Save review"}
         </button>
-        {saveState === "saved" && <span className="save-confirmation">Saved</span>}
+        {saveState === "saved" && (
+          <span className="save-confirmation">
+            <CheckCircleIcon /> Saved
+          </span>
+        )}
         {saveState === "error" && <span className="form-error">Could not save. Try again.</span>}
       </div>
 
