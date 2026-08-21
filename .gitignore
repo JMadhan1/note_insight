@@ -1,0 +1,32 @@
+# Assessment brief — private, not part of the deliverable
+Technical Assessment — Junior Full-Stack _ AI Engineer.pdf
+
+# Secrets
+.env
+.env.*
+!.env.example
+backend/serviceAccountKey.json
+backend/*firebase-adminsdk*.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+build/
+.vite/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+*.log
