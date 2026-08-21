@@ -78,7 +78,10 @@ class ReviewPayload(BaseModel):
 # ---------------------------------------------------------------------------
 
 class NoteCreateRequest(BaseModel):
-    note_text: str = Field(..., min_length=1, max_length=20000)
+    # The brief expects 100-3000 words typically, but robustness is explicitly tested with a
+    # 5000-word note (~28k characters average English word length) — this cap is set well above
+    # that, not at the expected/typical length, so that case actually succeeds rather than 422s.
+    note_text: str = Field(..., min_length=1, max_length=60000)
     pseudonym: str | None = Field(default=None, max_length=100)
     visit_date: str | None = None  # ISO date string (YYYY-MM-DD), optional
 

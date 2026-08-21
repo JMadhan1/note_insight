@@ -7,7 +7,13 @@ import { SparkleIcon } from "../components/icons";
 
 type SubmitState = "idle" | "submitting" | "error";
 
-const MAX_WORDS = 3000;
+// The brief describes 100-3000 words as the typical range, but robustness is explicitly
+// tested with a 5000-word note — that must still submit, just with a heads-up, not a block.
+// The hard ceiling matches the backend's actual cap (60,000 chars, NoteCreateRequest.note_text)
+// converted to a safe word-count estimate, so the button only disables when a submission would
+// genuinely be rejected server-side, not at an arbitrary "typical" threshold.
+const TYPICAL_WORDS = 3000;
+const HARD_MAX_WORDS = 9000;
 
 function wordCount(text: string): number {
   const trimmed = text.trim();
@@ -23,8 +29,9 @@ export function NoteSubmitPage() {
   const navigate = useNavigate();
 
   const words = wordCount(noteText);
-  const overLimit = words > MAX_WORDS;
-  const canSubmit = noteText.trim().length > 0 && !overLimit && state !== "submitting";
+  const overTypical = words > TYPICAL_WORDS;
+  const overHardLimit = words > HARD_MAX_WORDS;
+  const canSubmit = noteText.trim().length > 0 && !overHardLimit && state !== "submitting";
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -94,8 +101,13 @@ export function NoteSubmitPage() {
             placeholder="Paste the free-text clinical note here…"
             required
           />
-          <div className={overLimit ? "word-count word-count-over" : "word-count"}>
-            {words} words{overLimit ? " — over the 3000 word limit" : ""}
+          <div className={overHardLimit ? "word-count word-count-over" : "word-count"}>
+            {words} words
+            {overHardLimit
+              ? " — too long to submit, trim it down"
+              : overTypical
+                ? " — longer than typical, but that's fine"
+                : ""}
           </div>
 
           {state === "error" && <p className="form-error">{error}</p>}

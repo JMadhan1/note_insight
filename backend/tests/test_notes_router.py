@@ -122,7 +122,7 @@ def test_submit_note_rejects_blank_text():
 
 def test_submit_note_rejects_oversized_text():
     _as_uid("uid-1")
-    response = client.post("/notes", json={"note_text": "a" * 20001})
+    response = client.post("/notes", json={"note_text": "a" * 60001})
     assert response.status_code == 422
 
 
