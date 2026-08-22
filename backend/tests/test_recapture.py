@@ -50,6 +50,7 @@ def test_flags_condition_missing_from_current_visit(mock_get_db):
     assert len(reminders) == 1
     assert reminders[0].condition_name == "Diabetes"
     assert reminders[0].last_note_id == "note-past"
+    assert reminders[0].last_analysis_id == "analysis-past"
 
 
 @patch("app.firestore_service.get_db")

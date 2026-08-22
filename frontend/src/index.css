@@ -969,6 +969,57 @@ button:disabled {
   margin-top: 2px;
 }
 
+.recapture-panel {
+  background: var(--rose-50);
+  border: 1px solid color-mix(in srgb, var(--rose-500) 28%, transparent);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin-bottom: 28px;
+}
+
+.recapture-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--rose-600);
+  margin-bottom: 6px;
+}
+
+.recapture-panel-intro {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: 0 0 12px;
+  max-width: 68ch;
+}
+
+.recapture-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.recapture-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 9px 13px;
+  font-size: 13.5px;
+}
+
+.recapture-item a {
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 12.5px;
+}
+
 /* ============================= History ============================= */
 
 .history-table {

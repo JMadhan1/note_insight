@@ -29,6 +29,13 @@ export interface StoredAnalysisOutput {
   summary: string;
 }
 
+export interface RecaptureReminder {
+  condition_name: string;
+  last_documented_at: string;
+  last_note_id: string;
+  last_analysis_id: string;
+}
+
 export interface AnalysisResponse {
   id: string;
   note_id: string;
@@ -40,6 +47,7 @@ export interface AnalysisResponse {
   review: StoredAnalysisOutput | null;
   review_status: ReviewStatus;
   error_message: string | null;
+  recapture_reminders: RecaptureReminder[];
 }
 
 export interface NoteResponse {

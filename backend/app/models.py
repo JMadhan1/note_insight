@@ -109,6 +109,7 @@ class RecaptureReminder(BaseModel):
     condition_name: str
     last_documented_at: datetime
     last_note_id: str
+    last_analysis_id: str
 
 
 class AnalysisResponse(BaseModel):

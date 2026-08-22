@@ -381,6 +381,7 @@ def find_recapture_reminders(
                 condition_name=name,
                 last_documented_at=note_data["createdAt"],
                 last_note_id=note_doc.id,
+                last_analysis_id=latest_analysis_id,
             )
 
     return list(seen.values())

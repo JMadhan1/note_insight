@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { getAnalysis, getNote, submitReview } from "../api/notes";
 import type { AnalysisResponse, StoredAnalysisOutput, StoredCondition } from "../types/api";
-import { AlertTriangleIcon, CheckCircleIcon, UnverifiedIcon } from "../components/icons";
+import { AlertTriangleIcon, CheckCircleIcon, HistoryClockIcon, UnverifiedIcon } from "../components/icons";
 import { buildHighlightedSegments } from "../utils/highlightNote";
 
 type LoadState = "loading" | "loaded" | "error";
@@ -139,6 +139,33 @@ export function AnalysisPage() {
         <span>·</span>
         <span className={`status-pill status-${analysis.review_status}`}>{analysis.review_status}</span>
       </p>
+
+      {analysis.recapture_reminders.length > 0 && (
+        <div className="recapture-panel">
+          <div className="recapture-panel-title">
+            <HistoryClockIcon />
+            Possible recapture gap{analysis.recapture_reminders.length > 1 ? "s" : ""}
+          </div>
+          <p className="recapture-panel-intro">
+            Documented at a past visit for this patient, not mentioned today — chronic
+            conditions have to be re-documented every visit or they stop counting toward
+            risk adjustment.
+          </p>
+          <ul className="recapture-list">
+            {analysis.recapture_reminders.map((reminder) => (
+              <li key={reminder.condition_name} className="recapture-item">
+                <span>
+                  <strong>{reminder.condition_name}</strong> — last documented{" "}
+                  {new Date(reminder.last_documented_at).toLocaleDateString()}
+                </span>
+                <Link to={`/app/notes/${reminder.last_note_id}/analyses/${reminder.last_analysis_id}`}>
+                  View that visit →
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <section>
         <h2>Original note</h2>
