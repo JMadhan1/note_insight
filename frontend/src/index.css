@@ -1211,10 +1211,55 @@ button:disabled {
   margin: 0;
 }
 
+.landing-repo-banner {
+  max-width: 1240px;
+  margin: 8px auto 0;
+  width: calc(100% - 96px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 28px 32px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(155deg, var(--brand-900), var(--brand-700));
+  color: white;
+}
+
+.landing-repo-text h3 {
+  color: white;
+  font-size: 19px;
+  margin-bottom: 4px;
+}
+
+.landing-repo-text p {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 14px;
+  margin: 0;
+}
+
+.landing-repo-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 22px;
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--brand-700);
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.landing-repo-cta:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
 .landing-foot {
-  margin-top: auto;
+  margin-top: 48px;
   border-top: 1px solid var(--border);
-  padding: 22px 48px;
+  padding: 26px 48px;
   max-width: 1240px;
   margin-left: auto;
   margin-right: auto;
@@ -1223,15 +1268,44 @@ button:disabled {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 16px;
+}
+
+.landing-foot-author {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.landing-foot-author-text {
+  display: flex;
+  flex-direction: column;
   font-size: 13px;
+}
+
+.landing-foot-author-text strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.landing-foot-author-text span {
   color: var(--ink-faint);
 }
 
-.landing-foot a {
-  color: var(--brand-500);
+.landing-foot-links {
+  display: flex;
+  gap: 20px;
+}
+
+.landing-foot-links a {
+  color: var(--ink-soft);
   text-decoration: none;
   font-weight: 600;
+  font-size: 13.5px;
+}
+
+.landing-foot-links a:hover {
+  color: var(--brand-500);
 }
 
 @media (max-width: 900px) {
@@ -1242,5 +1316,6 @@ button:disabled {
   .landing-preview { order: -1; max-width: 440px; margin: 0 auto 8px; }
   .landing-features { grid-template-columns: 1fr; padding: 8px 20px 48px; }
   .landing-nav { padding: 18px 20px; }
-  .landing-foot { padding: 18px 20px; flex-direction: column; align-items: flex-start; }
+  .landing-repo-banner { width: calc(100% - 40px); padding: 24px; flex-direction: column; text-align: center; }
+  .landing-foot { padding: 22px 20px; flex-direction: column; align-items: flex-start; }
 }
