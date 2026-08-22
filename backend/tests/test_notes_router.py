@@ -17,15 +17,18 @@ from app.models import (
     AnalysisResponse,
     AnalysisStatus,
     NoteResponse,
+    ReviewMetrics,
     ReviewStatus,
     StoredAnalysisOutput,
 )
+from app.rate_limit import _reset_for_tests as _reset_rate_limit
 
 client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
 def _clear_overrides():
+    _reset_rate_limit()
     yield
     app.dependency_overrides.clear()
 
@@ -161,3 +164,53 @@ def test_review_analysis_not_found_returns_404(monkeypatch):
     )
 
     assert response.status_code == 404
+
+
+def test_submit_note_rate_limited_after_five_in_a_window(monkeypatch):
+    """The 6th note submission within a minute must be rejected with 429 —
+    proves the limiter is actually wired into the route, not just unit-tested
+    in isolation."""
+    _as_uid("uid-rate-limit")
+    note = _sample_note()
+    analysis = _sample_analysis(AnalysisStatus.COMPLETE)
+    monkeypatch.setattr("app.routers.notes.db.create_note", MagicMock(return_value=note))
+    monkeypatch.setattr("app.routers.notes.db.create_analysis_pending", MagicMock(return_value="analysis-1"))
+    monkeypatch.setattr(
+        "app.routers.notes.run_analysis",
+        MagicMock(return_value=(StoredAnalysisOutput(conditions=[], documentation_gaps=[], summary="ok"), "gemini")),
+    )
+    monkeypatch.setattr("app.routers.notes.db.complete_analysis", MagicMock())
+    monkeypatch.setattr("app.routers.notes.db.get_note", MagicMock(return_value=note))
+    monkeypatch.setattr("app.routers.notes.db.get_analysis", MagicMock(return_value=analysis))
+
+    statuses = []
+    for _ in range(6):
+        response = client.post("/notes", json={"note_text": "Patient has a cold."})
+        statuses.append(response.status_code)
+
+    assert statuses[:5] == [201] * 5
+    assert statuses[5] == 429
+
+
+def test_metrics_route_returns_computed_metrics(monkeypatch):
+    _as_uid("uid-1")
+    fake_metrics = ReviewMetrics(
+        reviewed_analyses=3,
+        total_conditions_suggested=5,
+        total_edited=2,
+        total_rejected=1,
+        total_added=1,
+        correction_rate=0.6,
+        by_condition=[],
+    )
+    monkeypatch.setattr("app.routers.notes.db.compute_review_metrics", MagicMock(return_value=fake_metrics))
+
+    response = client.get("/notes/metrics")
+
+    assert response.status_code == 200
+    assert response.json()["reviewed_analyses"] == 3
+
+
+def test_metrics_route_requires_auth():
+    response = client.get("/notes/metrics")
+    assert response.status_code == 401

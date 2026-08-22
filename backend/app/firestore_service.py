@@ -19,9 +19,11 @@ from .config import get_settings
 from .models import (
     AnalysisResponse,
     AnalysisStatus,
+    ConditionMetric,
     NoteCreateRequest,
     NoteListItem,
     NoteResponse,
+    ReviewMetrics,
     ReviewPayload,
     ReviewStatus,
     StoredAnalysisOutput,
@@ -222,3 +224,83 @@ def submit_review(uid: str, note_id: str, analysis_id: str, review: ReviewPayloa
 
     updated = ref.get().to_dict()
     return _analysis_from_dict(note_id, analysis_id, updated)
+
+
+# ---------------------------------------------------------------------------
+# Metrics — how often the human corrects the machine, broken down by condition
+# ---------------------------------------------------------------------------
+
+def compute_review_metrics(uid: str) -> ReviewMetrics:
+    """Walks every reviewed analysis for this user and tallies, per condition name,
+    how often the AI's suggestion was kept as-is, edited, rejected, or how often the
+    human added a condition the AI never suggested at all.
+
+    Not on the hot path (list_notes is), so a straightforward per-note fetch of the
+    analyses subcollection is fine here rather than a collection-group query — this
+    user's own note/analysis count is small enough that N+1 reads cost nothing
+    meaningful, and it avoids needing a denormalized uid field just to support one
+    infrequently-viewed page.
+    """
+    condition_stats: dict[str, dict[str, int]] = {}
+    total_suggested = 0
+    total_edited = 0
+    total_rejected = 0
+    total_added = 0
+    reviewed_count = 0
+
+    for note_doc in _notes_ref(uid).stream():
+        for analysis_doc in _analyses_ref(uid, note_doc.id).stream():
+            data = analysis_doc.to_dict()
+            review = data.get("review")
+            if not review:
+                continue
+            reviewed_count += 1
+
+            for condition in review.get("conditions", []):
+                name = (condition.get("name") or "").strip() or "(unnamed)"
+                source = condition.get("source", "ai")
+                rejected = bool(condition.get("rejected", False))
+                stats = condition_stats.setdefault(
+                    name, {"suggested": 0, "edited": 0, "rejected": 0, "added": 0}
+                )
+
+                if source == "human_added":
+                    stats["added"] += 1
+                    total_added += 1
+                    continue
+
+                stats["suggested"] += 1
+                total_suggested += 1
+                if rejected:
+                    stats["rejected"] += 1
+                    total_rejected += 1
+                elif source == "human_edited":
+                    stats["edited"] += 1
+                    total_edited += 1
+
+    by_condition = [
+        ConditionMetric(
+            name=name,
+            times_suggested=stats["suggested"],
+            times_edited=stats["edited"],
+            times_rejected=stats["rejected"],
+            times_added=stats["added"],
+        )
+        for name, stats in sorted(
+            condition_stats.items(),
+            key=lambda item: item[1]["suggested"] + item[1]["added"],
+            reverse=True,
+        )
+    ]
+
+    correction_rate = (total_edited + total_rejected) / total_suggested if total_suggested else 0.0
+
+    return ReviewMetrics(
+        reviewed_analyses=reviewed_count,
+        total_conditions_suggested=total_suggested,
+        total_edited=total_edited,
+        total_rejected=total_rejected,
+        total_added=total_added,
+        correction_rate=correction_rate,
+        by_condition=by_condition,
+    )

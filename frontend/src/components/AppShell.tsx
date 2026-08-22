@@ -1,6 +1,6 @@
 import { NavLink, Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { BrandGlyph, HistoryIcon, NewNoteIcon } from "./icons";
+import { BrandGlyph, HistoryIcon, MetricsIcon, NewNoteIcon } from "./icons";
 
 function navLinkClass({ isActive }: { isActive: boolean }): string {
   return isActive ? "sidebar-link active" : "sidebar-link";
@@ -34,6 +34,9 @@ export function AppShell() {
           </NavLink>
           <NavLink to="/app/history" className={navLinkClass}>
             <HistoryIcon /> History
+          </NavLink>
+          <NavLink to="/app/metrics" className={navLinkClass}>
+            <MetricsIcon /> Metrics
           </NavLink>
         </nav>
 

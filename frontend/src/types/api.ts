@@ -77,3 +77,21 @@ export interface ReviewPayload {
   documentation_gaps: string[];
   summary: string;
 }
+
+export interface ConditionMetric {
+  name: string;
+  times_suggested: number;
+  times_edited: number;
+  times_rejected: number;
+  times_added: number;
+}
+
+export interface ReviewMetrics {
+  reviewed_analyses: number;
+  total_conditions_suggested: number;
+  total_edited: number;
+  total_rejected: number;
+  total_added: number;
+  correction_rate: number;
+  by_condition: ConditionMetric[];
+}

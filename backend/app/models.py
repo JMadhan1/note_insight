@@ -133,3 +133,24 @@ class NoteListItem(BaseModel):
 class NoteWithAnalysis(BaseModel):
     note: NoteResponse
     analysis: AnalysisResponse
+
+
+class ConditionMetric(BaseModel):
+    """Correction stats for one condition name, aggregated across every reviewed
+    analysis — the bonus item's own phrasing: 'broken down by condition'."""
+
+    name: str
+    times_suggested: int  # times the AI proposed this condition (edited or not, excluding rejects)
+    times_edited: int
+    times_rejected: int
+    times_added: int  # times a human added this condition themselves, the AI never suggested it
+
+
+class ReviewMetrics(BaseModel):
+    reviewed_analyses: int
+    total_conditions_suggested: int
+    total_edited: int
+    total_rejected: int
+    total_added: int
+    correction_rate: float  # (edited + rejected) / suggested, 0.0 if nothing suggested yet
+    by_condition: list[ConditionMetric]

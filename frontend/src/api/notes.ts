@@ -5,6 +5,7 @@ import type {
   NoteListItem,
   NoteResponse,
   NoteWithAnalysis,
+  ReviewMetrics,
   ReviewPayload,
 } from "../types/api";
 
@@ -22,6 +23,10 @@ export function getNote(noteId: string): Promise<NoteResponse> {
 
 export function getAnalysis(noteId: string, analysisId: string): Promise<AnalysisResponse> {
   return apiRequest<AnalysisResponse>(`/notes/${noteId}/analyses/${analysisId}`);
+}
+
+export function getMetrics(): Promise<ReviewMetrics> {
+  return apiRequest<ReviewMetrics>("/notes/metrics");
 }
 
 export function submitReview(

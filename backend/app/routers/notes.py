@@ -10,9 +10,11 @@ from ..models import (
     NoteListItem,
     NoteResponse,
     NoteWithAnalysis,
+    ReviewMetrics,
     ReviewPayload,
 )
 from ..prompts.note_analysis_prompt import PROMPT_VERSION
+from ..rate_limit import enforce_note_submission_rate_limit
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -22,6 +24,7 @@ def submit_note(payload: NoteCreateRequest, uid: str = Depends(get_current_uid))
     """Creates the note, then immediately runs the AI analysis synchronously.
     A note is never left without an analysis record: on failure we still store a
     'failed' analysis with the error, rather than silently dropping the submission."""
+    enforce_note_submission_rate_limit(uid)
     note = db.create_note(uid, payload)
     settings = get_settings()
     analysis_id = db.create_analysis_pending(uid, note.id, settings.gemini_model, PROMPT_VERSION)
@@ -45,6 +48,13 @@ def submit_note(payload: NoteCreateRequest, uid: str = Depends(get_current_uid))
 @router.get("", response_model=list[NoteListItem])
 def list_notes(uid: str = Depends(get_current_uid)) -> list[NoteListItem]:
     return db.list_notes(uid)
+
+
+@router.get("/metrics", response_model=ReviewMetrics)
+def get_review_metrics(uid: str = Depends(get_current_uid)) -> ReviewMetrics:
+    """Declared before /{note_id} — otherwise FastAPI would match 'metrics' as a
+    note id and this route would never be reached."""
+    return db.compute_review_metrics(uid)
 
 
 @router.get("/{note_id}", response_model=NoteResponse)

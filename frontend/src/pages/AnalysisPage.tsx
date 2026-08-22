@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getAnalysis, submitReview } from "../api/notes";
+import { getAnalysis, getNote, submitReview } from "../api/notes";
 import type { AnalysisResponse, StoredAnalysisOutput, StoredCondition } from "../types/api";
 import { AlertTriangleIcon, CheckCircleIcon, UnverifiedIcon } from "../components/icons";
+import { buildHighlightedSegments } from "../utils/highlightNote";
 
 type LoadState = "loading" | "loaded" | "error";
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -30,6 +31,7 @@ function sourceLabel(source: StoredCondition["source"]): string {
 export function AnalysisPage() {
   const { noteId, analysisId } = useParams<{ noteId: string; analysisId: string }>();
   const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
+  const [noteText, setNoteText] = useState("");
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadError, setLoadError] = useState("");
   const [draft, setDraft] = useState<StoredAnalysisOutput | null>(null);
@@ -39,11 +41,12 @@ export function AnalysisPage() {
     if (!noteId || !analysisId) return;
     let cancelled = false;
     setLoadState("loading");
-    getAnalysis(noteId, analysisId)
-      .then((data) => {
+    Promise.all([getAnalysis(noteId, analysisId), getNote(noteId)])
+      .then(([analysisData, noteData]) => {
         if (cancelled) return;
-        setAnalysis(data);
-        setDraft(data.review ?? data.ai_output);
+        setAnalysis(analysisData);
+        setDraft(analysisData.review ?? analysisData.ai_output);
+        setNoteText(noteData.note_text);
         setLoadState("loaded");
       })
       .catch((err: unknown) => {
@@ -136,6 +139,28 @@ export function AnalysisPage() {
         <span>·</span>
         <span className={`status-pill status-${analysis.review_status}`}>{analysis.review_status}</span>
       </p>
+
+      <section>
+        <h2>Original note</h2>
+        <p className="page-intro" style={{ marginTop: -8, marginBottom: 14 }}>
+          Evidence quotes highlighted in place — scan this instead of re-reading the whole note.
+        </p>
+        <div className="note-text-card">
+          {buildHighlightedSegments(noteText, draft.conditions).map((segment, i) =>
+            segment.status ? (
+              <mark
+                key={i}
+                className={`note-highlight note-highlight-${segment.status}`}
+                title={draft.conditions[segment.conditionIndex ?? 0]?.name}
+              >
+                {segment.text}
+              </mark>
+            ) : (
+              <span key={i}>{segment.text}</span>
+            ),
+          )}
+        </div>
+      </section>
 
       <section>
         <h2>Summary</h2>

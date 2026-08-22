@@ -153,7 +153,11 @@ literal substring of the original note before anything is stored.
 | **Per-user data isolation** | Firestore paths are rooted at the caller's *verified* uid, not a client-supplied field — structurally enforced and tested, not just policed by convention |
 | **Google + email/password auth** | Firebase Authentication, both providers wired and working |
 | **Graceful failure, not silence** | A note is never lost — a failed analysis is stored with its error rather than the request just disappearing |
-| **31 automated tests** | Schema validation, quote verification, Gemini retry/failure paths, and cross-user isolation, all covered |
+| **Explainable, not just labeled** | Every documentation-status flag comes with one specific sentence saying *why* — "type and control status are not stated," not just "ambiguous" |
+| **Inline evidence highlighting** | Every verified quote is highlighted in place inside the original note, color-coded by documentation status, so re-reading the whole note isn't necessary to see what was flagged |
+| **Correction metrics** | A dedicated view aggregating how often the AI's suggestions were kept, edited, rejected, or missed entirely — broken down per condition |
+| **Per-user rate limiting** | Note submissions are capped per uid to prevent one user from burning through the Gemini quota |
+| **47 automated tests** | Schema validation, quote verification, Gemini retry/failure paths, cross-user isolation, rate limiting, and metrics aggregation, all covered |
 
 ---
 
@@ -340,15 +344,18 @@ cd backend
 pytest -q
 ```
 
-31 tests across 5 files, all passing, no live network calls (Gemini and Firestore are mocked):
+47 tests across 8 files, all passing, no live network calls (Gemini and Firestore are mocked):
 
 | File | Covers |
 |---|---|
-| `test_schema_validation.py` | Pydantic rejects out-of-range confidence, invalid enum values, blank/oversized notes |
+| `test_schema_validation.py` | Pydantic rejects out-of-range confidence, invalid enum values, blank/oversized notes, empty `status_reason` |
 | `test_quote_verification.py` | Real matches, false positives (`"diabetes"` ≠ `"diabetic"`), whitespace/punctuation tolerance |
 | `test_gemini_service.py` | Retry-then-succeed, retry-then-fail, unverified-quote flagging on a real Gemini response shape |
 | `test_firestore_isolation.py` | Every data-access path is structurally rooted at the caller's uid |
-| `test_notes_router.py` | Full HTTP layer: auth requirement, 404 on cross-user access, failed analysis stored (not a 500) |
+| `test_notes_router.py` | Full HTTP layer: auth requirement, 404 on cross-user access, failed analysis stored (not a 500), rate limiting, metrics route |
+| `test_auth.py` | Firebase init failure surfaces as 503 (misconfigured), not an unhandled 500 |
+| `test_rate_limit.py` | Per-user sliding window: allows up to the limit, blocks the next one, doesn't block a different user |
+| `test_metrics.py` | Correction-rate aggregation by condition name, unreviewed analyses excluded, no division-by-zero with no data yet |
 
 Beyond the automated suite, the entire flow — signup, real Gemini analysis, edit/reject/add,
 save, reload, history — has been run live against a real Firebase project and a real Gemini
@@ -364,21 +371,23 @@ Left unfinished, deliberately, in favor of getting the core loop solid end to en
   above) and the backend has no obstacle to a "re-analyze with the current prompt" button, but
   no route or UI exists for triggering it yet — a note can only be analyzed once from the
   current frontend.
-- **No streaming, caching, or rate limiting** (all listed as optional bonuses in the
-  assessment). Caching identical notes would be cheap to add on top of the existing analysis
-  pipeline; rate limiting per uid would sit naturally as FastAPI middleware keyed off
-  `get_current_uid`.
-- **No inline evidence-quote highlighting in the original note text** — the `quote_verified`
-  flag and the `evidence_quote` field are already in the data returned to the frontend, so this
-  is a rendering task (splitting the note text around matched spans), not a data-model change.
-- **No component-level frontend tests** — the backend has 31; the frontend has been verified by
+- **No streaming or caching** (2 of the 6 optional bonuses). Rate limiting and inline
+  evidence-quote highlighting, originally on this list, are now built — see
+  [What it does](#what-it-does). Caching identical notes would be cheap to add on top of the
+  existing analysis pipeline; streaming would need a different Gemini call shape
+  (`generate_content_stream`) and a frontend that renders partial JSON, a bigger change than the
+  rest of this list.
+- **No component-level frontend tests** — the backend has 47; the frontend has been verified by
   hand, live, repeatedly, but not with an automated suite. The highest-value addition here
   would be `AnalysisPage`'s review-diff logic (the `source: ai → human_edited` transition).
 - **ICD-10 codes are exactly as approximate as the assessment says is acceptable** — no lookup
   against a real coding table, per the brief's explicit note that this isn't being evaluated.
+- **Rate limiting is in-memory, single-instance** — a documented, deliberate tradeoff (see
+  `backend/app/rate_limit.py`), not an oversight. It resets on redeploy and wouldn't be shared
+  across multiple backend instances; a real production version would move it to Redis at the
+  point this ever needed to scale horizontally, which a free-tier single-dyno deployment doesn't.
 
-With one more week, in priority order: re-analysis UI, inline quote highlighting (cheapest
-bonus, reuses existing verification data), frontend tests, then caching/rate-limiting.
+With one more week, in priority order: re-analysis UI, frontend tests, then streaming/caching.
 
 ---
 
@@ -437,19 +446,23 @@ note_insight/
 │   │   ├── config.py                Env-based settings, secrets validated on first use
 │   │   ├── models.py                Pydantic schemas — the AI output contract + API contract
 │   │   ├── gemini_service.py        Schema-constrained Gemini calls, retry, quote verification
-│   │   ├── firestore_service.py     uid-scoped data access layer
+│   │   ├── firestore_service.py     uid-scoped data access layer + metrics aggregation
+│   │   ├── rate_limit.py            Per-user, in-memory sliding-window limiter
 │   │   ├── prompts/
 │   │   │   └── note_analysis_prompt.py   The actual prompt sent to Gemini
 │   │   └── routers/
 │   │       ├── health.py            GET /health
-│   │       └── notes.py             POST /notes, GET /notes, review endpoint
-│   └── tests/                       31 tests: schema, quotes, retries, isolation, HTTP layer
+│   │       └── notes.py             POST /notes, GET /notes, GET /notes/metrics, review endpoint
+│   └── tests/                       47 tests: schema, quotes, retries, isolation, HTTP layer,
+│                                     rate limiting, metrics
 ├── frontend/                       React + TypeScript (Vite)
 │   └── src/
-│       ├── pages/                   AuthPage, NoteSubmitPage, AnalysisPage, HistoryPage
+│       ├── pages/                   LandingPage, AuthPage, NoteSubmitPage, AnalysisPage,
+│       │                            HistoryPage, MetricsPage
 │       ├── components/              AppShell (sidebar layout), hand-rolled icon set
 │       ├── context/                 AuthContext — Firebase auth state
 │       ├── api/                     Typed fetch client mirroring the backend contract
+│       ├── utils/                   highlightNote.ts — inline evidence-quote highlighting
 │       └── types/                   TypeScript types mirroring the Pydantic models
 ├── sample_notes/                   3 synthetic clinical notes to try the product with
 ├── render.yaml                     Render deploy blueprint (backend)
