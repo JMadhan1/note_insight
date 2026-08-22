@@ -47,7 +47,10 @@ def submit_note(payload: NoteCreateRequest, uid: str = Depends(get_current_uid))
 
     try:
         output, _model_used = run_analysis(payload.note_text)
-        db.complete_analysis(uid, note.id, analysis_id, output)
+        reminders = db.find_recapture_reminders(
+            uid, payload.pseudonym, note.id, {c.name for c in output.conditions if not c.rejected}
+        )
+        db.complete_analysis(uid, note.id, analysis_id, output, reminders)
     except AnalysisFailure as exc:
         db.fail_analysis(uid, note.id, analysis_id, str(exc))
     except RuntimeError as exc:
@@ -137,7 +140,10 @@ def submit_note_streaming(payload: NoteCreateRequest, uid: str = Depends(get_cur
                 logger.warning("Streamed output failed validation, falling back: %s", exc)
                 output, _model = run_analysis(payload.note_text)
 
-            db.complete_analysis(uid, note.id, analysis_id, output)
+            reminders = db.find_recapture_reminders(
+                uid, payload.pseudonym, note.id, {c.name for c in output.conditions if not c.rejected}
+            )
+            db.complete_analysis(uid, note.id, analysis_id, output, reminders)
             yield f"event: complete\ndata: {json.dumps({'note_id': note.id, 'analysis_id': analysis_id})}\n\n"
 
         except (AnalysisFailure, RuntimeError) as exc:

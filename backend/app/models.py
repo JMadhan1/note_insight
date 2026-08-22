@@ -98,6 +98,19 @@ class NoteCreateRequest(BaseModel):
         return v
 
 
+class RecaptureReminder(BaseModel):
+    """A chronic condition documented at a past visit for this same patient
+    (matched by pseudonym) that isn't mentioned in today's note. Answers the
+    real 'annual recapture' problem: CMS resets risk scores every January 1 and
+    doesn't carry chronic diagnoses forward automatically, so a condition the
+    patient still has silently stops counting once nobody re-documents it.
+    System-computed — never written by the AI or the human directly."""
+
+    condition_name: str
+    last_documented_at: datetime
+    last_note_id: str
+
+
 class AnalysisResponse(BaseModel):
     id: str
     note_id: str
@@ -109,6 +122,7 @@ class AnalysisResponse(BaseModel):
     review: StoredAnalysisOutput | None
     review_status: ReviewStatus
     error_message: str | None = None
+    recapture_reminders: list[RecaptureReminder] = []
 
 
 class NoteResponse(BaseModel):

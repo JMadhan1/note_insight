@@ -23,6 +23,7 @@ from .models import (
     NoteCreateRequest,
     NoteListItem,
     NoteResponse,
+    RecaptureReminder,
     ReviewMetrics,
     ReviewPayload,
     ReviewStatus,
@@ -146,11 +147,18 @@ def create_analysis_pending(uid: str, note_id: str, model_version: str, prompt_v
     return ref.id
 
 
-def complete_analysis(uid: str, note_id: str, analysis_id: str, ai_output: StoredAnalysisOutput) -> None:
+def complete_analysis(
+    uid: str,
+    note_id: str,
+    analysis_id: str,
+    ai_output: StoredAnalysisOutput,
+    recapture_reminders: list[RecaptureReminder] | None = None,
+) -> None:
     _analyses_ref(uid, note_id).document(analysis_id).update(
         {
             "status": AnalysisStatus.COMPLETE.value,
             "aiOutput": ai_output.model_dump(mode="json"),
+            "recaptureReminders": [r.model_dump(mode="json") for r in (recapture_reminders or [])],
         }
     )
     _notes_ref(uid).document(note_id).update(
@@ -190,6 +198,7 @@ def _analysis_from_dict(note_id: str, analysis_id: str, d: dict) -> AnalysisResp
         review=StoredAnalysisOutput(**d["review"]) if d.get("review") else None,
         review_status=ReviewStatus(d.get("reviewStatus", "pending")),
         error_message=d.get("errorMessage"),
+        recapture_reminders=[RecaptureReminder(**r) for r in d.get("recaptureReminders", [])],
     )
 
 
@@ -304,3 +313,74 @@ def compute_review_metrics(uid: str) -> ReviewMetrics:
         correction_rate=correction_rate,
         by_condition=by_condition,
     )
+
+
+# ---------------------------------------------------------------------------
+# Cross-visit recapture reminders — the real 'annual recapture' gap: CMS
+# resets risk scores every January 1 and doesn't carry chronic diagnoses
+# forward automatically, so a condition the patient still has silently stops
+# counting once nobody re-documents it at a later visit.
+# ---------------------------------------------------------------------------
+
+def find_recapture_reminders(
+    uid: str,
+    pseudonym: str | None,
+    exclude_note_id: str,
+    current_condition_names: set[str],
+    limit: int = 10,
+) -> list[RecaptureReminder]:
+    """Looks at this patient's other visits (matched by pseudonym — the only
+    patient-linking field this product has) and flags chronic conditions that
+    were documented before but aren't mentioned today.
+
+    Deliberately filters by pseudonym alone, with no order_by, and sorts in
+    Python instead: a compound Firestore query (where + order_by on different
+    fields) needs a manually-created composite index, which would mean this
+    feature silently 500s in a fresh deployment until someone clicks a
+    Firebase console link. A single-field equality filter needs no such setup
+    — the tradeoff is a little more work done server-side, in exchange for
+    the whole app still being 'clone it and run it' with zero manual
+    Firestore configuration.
+    """
+    if not pseudonym or not pseudonym.strip():
+        return []
+
+    matching_notes = [
+        doc for doc in _notes_ref(uid).where("pseudonym", "==", pseudonym).stream() if doc.id != exclude_note_id
+    ]
+    matching_notes.sort(key=lambda doc: doc.to_dict().get("createdAt"), reverse=True)
+
+    normalized_current = {name.strip().lower() for name in current_condition_names}
+    seen: dict[str, RecaptureReminder] = {}
+
+    for note_doc in matching_notes[:limit]:
+        note_data = note_doc.to_dict()
+        latest_analysis_id = note_data.get("latestAnalysisId")
+        if not latest_analysis_id:
+            continue
+        analysis_snap = _analyses_ref(uid, note_doc.id).document(latest_analysis_id).get()
+        if not analysis_snap.exists:
+            continue
+        analysis_data = analysis_snap.to_dict()
+        # Prefer the human-reviewed version when it exists — a condition the
+        # clinician rejected shouldn't come back to haunt a later visit.
+        source = analysis_data.get("review") or analysis_data.get("aiOutput")
+        if not source:
+            continue
+
+        for condition in source.get("conditions", []):
+            if condition.get("rejected"):
+                continue
+            name = (condition.get("name") or "").strip()
+            if not name:
+                continue
+            normalized = name.lower()
+            if normalized in normalized_current or normalized in seen:
+                continue
+            seen[normalized] = RecaptureReminder(
+                condition_name=name,
+                last_documented_at=note_data["createdAt"],
+                last_note_id=note_doc.id,
+            )
+
+    return list(seen.values())
