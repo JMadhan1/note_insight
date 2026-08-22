@@ -3,7 +3,8 @@ import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { submitNote } from "../api/notes";
 import { ApiError } from "../api/client";
-import { SparkleIcon } from "../components/icons";
+import { MicIcon, SparkleIcon } from "../components/icons";
+import { useSpeechToText } from "../hooks/useSpeechToText";
 
 type SubmitState = "idle" | "submitting" | "error";
 
@@ -32,6 +33,13 @@ export function NoteSubmitPage() {
   const overTypical = words > TYPICAL_WORDS;
   const overHardLimit = words > HARD_MAX_WORDS;
   const canSubmit = noteText.trim().length > 0 && !overHardLimit && state !== "submitting";
+
+  const { support: speechSupport, isListening, interimText, start: startDictation, stop: stopDictation } =
+    useSpeechToText({
+      onFinalTranscript: (text) => {
+        setNoteText((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
+      },
+    });
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -92,15 +100,37 @@ export function NoteSubmitPage() {
             </div>
           </div>
 
-          <label htmlFor="noteText">Clinical note</label>
+          <div className="note-field-header">
+            <label htmlFor="noteText">Clinical note</label>
+            {speechSupport === "supported" && (
+              <button
+                type="button"
+                className={isListening ? "mic-button mic-button-active" : "mic-button"}
+                onClick={isListening ? stopDictation : startDictation}
+              >
+                <MicIcon />
+                {isListening ? "Stop dictating" : "Dictate instead"}
+              </button>
+            )}
+          </div>
           <textarea
             id="noteText"
             rows={16}
             value={noteText}
             onChange={(e) => setNoteText(e.target.value)}
-            placeholder="Paste the free-text clinical note here…"
+            placeholder="Paste the free-text clinical note here, or click Dictate to speak it…"
             required
           />
+          {isListening && (
+            <p className="interim-transcript">
+              {interimText || "Listening…"}
+            </p>
+          )}
+          {speechSupport === "unsupported" && (
+            <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+              Voice dictation isn't supported in this browser — try Chrome or Edge, or just type.
+            </p>
+          )}
           <div className={overHardLimit ? "word-count word-count-over" : "word-count"}>
             {words} words
             {overHardLimit

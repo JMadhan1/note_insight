@@ -446,6 +446,56 @@ button:disabled {
   margin-top: 1px;
 }
 
+.note-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.note-field-header label {
+  margin: 0;
+}
+
+.mic-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.mic-button:hover:not(:disabled) {
+  background: var(--paper);
+  border-color: var(--border-strong);
+  color: var(--ink);
+}
+
+.mic-button-active {
+  background: var(--rose-50);
+  border-color: color-mix(in srgb, var(--rose-500) 35%, transparent);
+  color: var(--rose-600);
+  animation: mic-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--rose-500) 25%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--rose-500) 0%, transparent); }
+}
+
+.interim-transcript {
+  margin: 8px 0 0;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--ink-faint);
+}
+
 /* ============================= Auth split screen ============================= */
 
 .auth-shell {
