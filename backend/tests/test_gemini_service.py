@@ -53,6 +53,7 @@ def test_run_analysis_marks_unverifiable_quote(mock_get_client):
                 name="Diabetes",
                 evidence_quote="this exact text is not in the note",
                 documentation_status="ambiguous",
+                status_reason="Type and control status are not stated.",
                 icd10_code="E11.9",
                 confidence=0.7,
             )
@@ -77,6 +78,7 @@ def test_run_analysis_verifies_real_quote(mock_get_client):
                 name="Hypertension",
                 evidence_quote="patient has hypertension",
                 documentation_status="ambiguous",
+                status_reason="Severity and current treatment plan are not stated.",
                 icd10_code="I10",
                 confidence=0.9,
             )

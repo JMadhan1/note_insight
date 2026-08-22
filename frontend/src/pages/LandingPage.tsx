@@ -93,6 +93,9 @@ export function LandingPage() {
                   </span>
                 </div>
                 <p className="landing-preview-quote">&ldquo;BP was a little high today, 148/92&rdquo;</p>
+                <p className="status-reason" style={{ marginTop: 8 }}>
+                  Reading noted but no formal diagnosis or treatment plan stated.
+                </p>
               </div>
               <div className="landing-preview-gap">
                 → Diabetes documented without type or control status

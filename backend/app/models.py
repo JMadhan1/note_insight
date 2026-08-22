@@ -40,6 +40,11 @@ class AIConditionModel(BaseModel):
         description="A verbatim quote copied exactly from the note text supporting this condition",
     )
     documentation_status: DocumentationStatus
+    status_reason: str = Field(
+        ..., min_length=1,
+        description="One plain sentence explaining why this documentation_status was chosen — "
+        "e.g. what specific detail is missing, not just the verdict",
+    )
     icd10_code: str = Field(..., min_length=1, description="Best-guess ICD-10 code; approximate is acceptable")
     confidence: float = Field(..., ge=0.0, le=1.0)
 

@@ -15,6 +15,7 @@ export interface StoredCondition {
   name: string;
   evidence_quote: string;
   documentation_status: DocumentationStatus;
+  status_reason: string;
   icd10_code: string;
   confidence: number;
   quote_verified: boolean;

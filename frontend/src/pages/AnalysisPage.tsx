@@ -12,6 +12,7 @@ function emptyCondition(): StoredCondition {
     name: "",
     evidence_quote: "",
     documentation_status: "ambiguous",
+    status_reason: "",
     icd10_code: "",
     confidence: 0.5,
     quote_verified: false,
@@ -195,6 +196,7 @@ export function AnalysisPage() {
                   <option value="ambiguous">Ambiguous</option>
                   <option value="mentioned_without_assessment_or_plan">Mentioned, no assessment/plan</option>
                 </select>
+                <p className="status-reason">{condition.status_reason}</p>
               </div>
               <div>
                 <label>ICD-10 code</label>

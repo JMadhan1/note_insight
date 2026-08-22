@@ -6,7 +6,7 @@ individually attributable to the prompt that produced them (see the "same
 note analyzed twice" question in PROJECT_PLAN.md).
 """
 
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"
 
 _INSTRUCTIONS = """You are assisting a physician by turning a free-text clinical note into \
 structured data for medical coding and billing review. You are a drafting aid, not a medical \
@@ -23,6 +23,10 @@ not include it.
    - documentation_status: one of "well_documented" (type/severity/plan all stated), "ambiguous" \
 (condition named but key details are unclear), or "mentioned_without_assessment_or_plan" \
 (named only in passing, e.g. in a medication or history list, with no current assessment or plan).
+   - status_reason: ONE short, specific sentence explaining why you chose that status — name the \
+exact missing or present detail, e.g. "Type and control status are not stated" or "Severity, \
+duration, and current treatment plan are all documented." Never just restate the status label \
+itself as the reason.
    - icd10_code: your best-guess ICD-10 code. Approximate is acceptable — exact coding accuracy \
 is not being evaluated.
    - confidence: your confidence in this extraction, from 0.0 to 1.0.

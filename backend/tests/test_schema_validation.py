@@ -9,6 +9,7 @@ def test_valid_ai_condition():
         name="Type 2 Diabetes",
         evidence_quote="the patient has type 2 diabetes",
         documentation_status="ambiguous",
+        status_reason="Type and control status are not stated.",
         icd10_code="E11.9",
         confidence=0.8,
     )
@@ -19,7 +20,7 @@ def test_confidence_above_range_rejected():
     with pytest.raises(ValidationError):
         AIConditionModel(
             name="X", evidence_quote="x", documentation_status="ambiguous",
-            icd10_code="E11.9", confidence=1.5,
+            status_reason="reason", icd10_code="E11.9", confidence=1.5,
         )
 
 
@@ -27,7 +28,7 @@ def test_confidence_below_range_rejected():
     with pytest.raises(ValidationError):
         AIConditionModel(
             name="X", evidence_quote="x", documentation_status="ambiguous",
-            icd10_code="E11.9", confidence=-0.1,
+            status_reason="reason", icd10_code="E11.9", confidence=-0.1,
         )
 
 
@@ -35,7 +36,7 @@ def test_invalid_documentation_status_rejected():
     with pytest.raises(ValidationError):
         AIConditionModel(
             name="X", evidence_quote="x", documentation_status="not_a_real_status",
-            icd10_code="E11.9", confidence=0.5,
+            status_reason="reason", icd10_code="E11.9", confidence=0.5,
         )
 
 
@@ -43,7 +44,15 @@ def test_empty_evidence_quote_rejected():
     with pytest.raises(ValidationError):
         AIConditionModel(
             name="X", evidence_quote="", documentation_status="ambiguous",
-            icd10_code="E11.9", confidence=0.5,
+            status_reason="reason", icd10_code="E11.9", confidence=0.5,
+        )
+
+
+def test_empty_status_reason_rejected():
+    with pytest.raises(ValidationError):
+        AIConditionModel(
+            name="X", evidence_quote="x", documentation_status="ambiguous",
+            status_reason="", icd10_code="E11.9", confidence=0.5,
         )
 
 
