@@ -458,6 +458,12 @@ button:disabled {
   margin: 0;
 }
 
+.note-input-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .mic-button {
   display: inline-flex;
   align-items: center;
@@ -494,6 +500,51 @@ button:disabled {
   font-size: 13px;
   font-style: italic;
   color: var(--ink-faint);
+}
+
+.stream-preview {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--paper);
+  overflow: hidden;
+}
+
+.stream-preview-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--border);
+}
+
+.stream-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--teal-500);
+  animation: stream-dot-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes stream-dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+.stream-preview-text {
+  margin: 0;
+  padding: 12px 14px;
+  max-height: 160px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-faint);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* ============================= Auth split screen ============================= */

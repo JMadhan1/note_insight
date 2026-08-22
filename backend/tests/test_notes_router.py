@@ -214,3 +214,146 @@ def test_metrics_route_returns_computed_metrics(monkeypatch):
 def test_metrics_route_requires_auth():
     response = client.get("/notes/metrics")
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# POST /notes/extract-text — PDF/image upload transcription
+# ---------------------------------------------------------------------------
+
+def test_extract_text_requires_auth():
+    response = client.post("/notes/extract-text", files={"file": ("note.png", b"fake-bytes", "image/png")})
+    assert response.status_code == 401
+
+
+def test_extract_text_rejects_unsupported_content_type():
+    _as_uid("uid-1")
+    response = client.post(
+        "/notes/extract-text", files={"file": ("note.txt", b"plain text", "text/plain")}
+    )
+    assert response.status_code == 400
+
+
+def test_extract_text_rejects_oversized_file():
+    _as_uid("uid-1")
+    oversized = b"a" * (10 * 1024 * 1024 + 1)
+    response = client.post(
+        "/notes/extract-text", files={"file": ("note.png", oversized, "image/png")}
+    )
+    assert response.status_code == 400
+
+
+def test_extract_text_returns_transcribed_text(monkeypatch):
+    _as_uid("uid-1")
+    monkeypatch.setattr(
+        "app.routers.notes.transcribe_document", MagicMock(return_value="Patient has a cough.")
+    )
+
+    response = client.post(
+        "/notes/extract-text", files={"file": ("note.png", b"fake-image-bytes", "image/png")}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["extracted_text"] == "Patient has a cough."
+
+
+def test_extract_text_returns_422_when_nothing_readable(monkeypatch):
+    _as_uid("uid-1")
+    monkeypatch.setattr("app.routers.notes.transcribe_document", MagicMock(return_value=""))
+
+    response = client.post(
+        "/notes/extract-text", files={"file": ("note.png", b"fake-image-bytes", "image/png")}
+    )
+
+    assert response.status_code == 422
+
+
+def test_extract_text_returns_502_on_gemini_error(monkeypatch):
+    _as_uid("uid-1")
+    monkeypatch.setattr(
+        "app.routers.notes.transcribe_document", MagicMock(side_effect=ValueError("boom"))
+    )
+
+    response = client.post(
+        "/notes/extract-text", files={"file": ("note.png", b"fake-image-bytes", "image/png")}
+    )
+
+    assert response.status_code == 502
+
+
+# ---------------------------------------------------------------------------
+# POST /notes/stream — live streaming analysis
+# ---------------------------------------------------------------------------
+
+def test_stream_route_requires_auth():
+    response = client.post("/notes/stream", json={"note_text": "Patient has a cold."})
+    assert response.status_code == 401
+
+
+def test_stream_route_sends_delta_and_complete_events(monkeypatch):
+    _as_uid("uid-1")
+    note = _sample_note()
+    monkeypatch.setattr("app.routers.notes.db.create_note", MagicMock(return_value=note))
+    monkeypatch.setattr("app.routers.notes.db.create_analysis_pending", MagicMock(return_value="analysis-1"))
+    monkeypatch.setattr(
+        "app.routers.notes.stream_analysis_text",
+        MagicMock(
+            return_value=iter(
+                ['{"conditions":[],', '"documentation_gaps":[],"summary":"ok"}']
+            )
+        ),
+    )
+    monkeypatch.setattr("app.routers.notes.db.complete_analysis", MagicMock())
+
+    response = client.post("/notes/stream", json={"note_text": "Patient has a cold."})
+
+    assert response.status_code == 200
+    assert "event: delta" in response.text
+    assert "event: complete" in response.text
+    assert '"note_id": "note-1"' in response.text
+
+
+def test_stream_route_falls_back_to_run_analysis_on_malformed_stream(monkeypatch):
+    """If the accumulated streamed text doesn't validate, the route must fall back
+    to run_analysis() rather than surfacing a raw validation error to the client."""
+    _as_uid("uid-1")
+    note = _sample_note()
+    monkeypatch.setattr("app.routers.notes.db.create_note", MagicMock(return_value=note))
+    monkeypatch.setattr("app.routers.notes.db.create_analysis_pending", MagicMock(return_value="analysis-1"))
+    monkeypatch.setattr(
+        "app.routers.notes.stream_analysis_text",
+        MagicMock(return_value=iter(["{not valid json"])),
+    )
+    fallback_output = StoredAnalysisOutput(conditions=[], documentation_gaps=[], summary="fallback")
+    monkeypatch.setattr(
+        "app.routers.notes.run_analysis", MagicMock(return_value=(fallback_output, "gemini-3.6-flash"))
+    )
+    complete_mock = MagicMock()
+    monkeypatch.setattr("app.routers.notes.db.complete_analysis", complete_mock)
+
+    response = client.post("/notes/stream", json={"note_text": "Patient has a cold."})
+
+    assert response.status_code == 200
+    assert "event: complete" in response.text
+    complete_mock.assert_called_once()
+    assert complete_mock.call_args[0][3] is fallback_output
+
+
+def test_stream_route_sends_error_event_and_saves_failed_analysis(monkeypatch):
+    _as_uid("uid-1")
+    note = _sample_note()
+    monkeypatch.setattr("app.routers.notes.db.create_note", MagicMock(return_value=note))
+    monkeypatch.setattr("app.routers.notes.db.create_analysis_pending", MagicMock(return_value="analysis-1"))
+
+    def _raise(*_args, **_kwargs):
+        raise AnalysisFailure("both attempts failed")
+        yield  # pragma: no cover - makes this a generator function
+
+    monkeypatch.setattr("app.routers.notes.stream_analysis_text", _raise)
+    fail_mock = MagicMock()
+    monkeypatch.setattr("app.routers.notes.db.fail_analysis", fail_mock)
+
+    response = client.post("/notes/stream", json={"note_text": "Patient has a cold."})
+
+    assert response.status_code == 200
+    assert "event: error" in response.text
+    fail_mock.assert_called_once()

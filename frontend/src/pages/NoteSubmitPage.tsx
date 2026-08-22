@@ -1,12 +1,13 @@
-import { useState } from "react";
-import type { FormEvent } from "react";
+import { useRef, useState } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { submitNote } from "../api/notes";
+import { extractTextFromFile, submitNoteStreaming } from "../api/notes";
 import { ApiError } from "../api/client";
-import { MicIcon, SparkleIcon } from "../components/icons";
+import { MicIcon, SparkleIcon, UploadIcon } from "../components/icons";
 import { useSpeechToText } from "../hooks/useSpeechToText";
 
 type SubmitState = "idle" | "submitting" | "error";
+type ExtractState = "idle" | "extracting" | "error";
 
 // The brief describes 100-3000 words as the typical range, but robustness is explicitly
 // tested with a 5000-word note — that must still submit, just with a heads-up, not a block.
@@ -15,6 +16,8 @@ type SubmitState = "idle" | "submitting" | "error";
 // genuinely be rejected server-side, not at an arbitrary "typical" threshold.
 const TYPICAL_WORDS = 3000;
 const HARD_MAX_WORDS = 9000;
+
+const ACCEPTED_UPLOAD_TYPES = "image/jpeg,image/png,image/webp,application/pdf";
 
 function wordCount(text: string): number {
   const trimmed = text.trim();
@@ -27,6 +30,10 @@ export function NoteSubmitPage() {
   const [visitDate, setVisitDate] = useState("");
   const [state, setState] = useState<SubmitState>("idle");
   const [error, setError] = useState("");
+  const [streamedPreview, setStreamedPreview] = useState("");
+  const [extractState, setExtractState] = useState<ExtractState>("idle");
+  const [extractError, setExtractError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
   const words = wordCount(noteText);
@@ -47,16 +54,37 @@ export function NoteSubmitPage() {
 
     setState("submitting");
     setError("");
+    setStreamedPreview("");
     try {
-      const result = await submitNote({
-        note_text: noteText,
-        pseudonym: pseudonym.trim() || null,
-        visit_date: visitDate || null,
-      });
-      navigate(`/app/notes/${result.note.id}/analyses/${result.analysis.id}`);
+      const result = await submitNoteStreaming(
+        {
+          note_text: noteText,
+          pseudonym: pseudonym.trim() || null,
+          visit_date: visitDate || null,
+        },
+        (delta) => setStreamedPreview((prev) => prev + delta),
+      );
+      navigate(`/app/notes/${result.noteId}/analyses/${result.analysisId}`);
     } catch (err) {
       setState("error");
       setError(err instanceof ApiError ? err.message : "Could not reach the server. Try again.");
+    }
+  }
+
+  async function handleFileSelected(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+
+    setExtractState("extracting");
+    setExtractError("");
+    try {
+      const { extracted_text } = await extractTextFromFile(file);
+      setNoteText((prev) => (prev.trim() ? `${prev.trim()}\n${extracted_text}` : extracted_text));
+      setExtractState("idle");
+    } catch (err) {
+      setExtractState("error");
+      setExtractError(err instanceof ApiError ? err.message : "Could not read that file. Try again.");
     }
   }
 
@@ -102,35 +130,50 @@ export function NoteSubmitPage() {
 
           <div className="note-field-header">
             <label htmlFor="noteText">Clinical note</label>
-            {speechSupport === "supported" && (
+            <div className="note-input-actions">
+              {speechSupport === "supported" && (
+                <button
+                  type="button"
+                  className={isListening ? "mic-button mic-button-active" : "mic-button"}
+                  onClick={isListening ? stopDictation : startDictation}
+                >
+                  <MicIcon />
+                  {isListening ? "Stop dictating" : "Dictate instead"}
+                </button>
+              )}
               <button
                 type="button"
-                className={isListening ? "mic-button mic-button-active" : "mic-button"}
-                onClick={isListening ? stopDictation : startDictation}
+                className="mic-button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={extractState === "extracting"}
               >
-                <MicIcon />
-                {isListening ? "Stop dictating" : "Dictate instead"}
+                <UploadIcon />
+                {extractState === "extracting" ? "Reading file…" : "Upload photo or PDF"}
               </button>
-            )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ACCEPTED_UPLOAD_TYPES}
+                onChange={handleFileSelected}
+                style={{ display: "none" }}
+              />
+            </div>
           </div>
           <textarea
             id="noteText"
             rows={16}
             value={noteText}
             onChange={(e) => setNoteText(e.target.value)}
-            placeholder="Paste the free-text clinical note here, or click Dictate to speak it…"
+            placeholder="Paste the free-text clinical note here, dictate it, or upload a photo/PDF…"
             required
           />
-          {isListening && (
-            <p className="interim-transcript">
-              {interimText || "Listening…"}
-            </p>
-          )}
+          {isListening && <p className="interim-transcript">{interimText || "Listening…"}</p>}
           {speechSupport === "unsupported" && (
             <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
               Voice dictation isn't supported in this browser — try Chrome or Edge, or just type.
             </p>
           )}
+          {extractState === "error" && <p className="form-error">{extractError}</p>}
           <div className={overHardLimit ? "word-count word-count-over" : "word-count"}>
             {words} words
             {overHardLimit
@@ -140,10 +183,19 @@ export function NoteSubmitPage() {
                 : ""}
           </div>
 
+          {state === "submitting" && (
+            <div className="stream-preview">
+              <div className="stream-preview-label">
+                <span className="stream-dot" /> Gemini is analyzing — watch it work
+              </div>
+              <pre className="stream-preview-text">{streamedPreview || "…"}</pre>
+            </div>
+          )}
+
           {state === "error" && <p className="form-error">{error}</p>}
 
           <button type="submit" disabled={!canSubmit}>
-            {state === "submitting" ? "Analyzing… this can take a few seconds" : "Analyze note"}
+            {state === "submitting" ? "Analyzing…" : "Analyze note"}
           </button>
         </form>
       </div>
