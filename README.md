@@ -92,7 +92,7 @@ Open `http://localhost:5173` → sign up with any email/password → paste one o
 
 ```bash
 cd backend && pytest -q
-# 31 passed
+# 70 passed
 ```
 
 ---
@@ -157,7 +157,11 @@ literal substring of the original note before anything is stored.
 | **Inline evidence highlighting** | Every verified quote is highlighted in place inside the original note, color-coded by documentation status, so re-reading the whole note isn't necessary to see what was flagged |
 | **Correction metrics** | A dedicated view aggregating how often the AI's suggestions were kept, edited, rejected, or missed entirely — broken down per condition |
 | **Per-user rate limiting** | Note submissions are capped per uid to prevent one user from burning through the Gemini quota |
-| **47 automated tests** | Schema validation, quote verification, Gemini retry/failure paths, cross-user isolation, rate limiting, and metrics aggregation, all covered |
+| **Streaming analysis** | `POST /notes/stream` returns Server-Sent Events so the UI shows Gemini's output arriving live instead of a blank loading screen; falls back to the non-streaming path if the accumulated stream doesn't validate |
+| **PDF / photo upload** | A photographed or scanned note (image or PDF) is transcribed to plain text via Gemini's multimodal input, then flows through the exact same validated pipeline as typed text |
+| **Voice dictation** | The Web Speech API fills the note textarea from spoken input as an alternative to typing, live-transcribed with an interim preview |
+| **Cross-visit recapture reminders** | Flags a chronic condition documented at a past visit for the same patient (matched by pseudonym) that's absent from today's note — the real "annual recapture" gap in CMS/HCC risk adjustment, not just a per-note check |
+| **70 automated tests** | Schema validation, quote verification, Gemini retry/failure paths, cross-user isolation, rate limiting, metrics aggregation, and recapture-reminder matching, all covered |
 
 ---
 
@@ -226,6 +230,7 @@ original visible in a collapsible panel.
 | `review` | Human (the clinician, during review) |
 | `quoteVerified` (per condition) | System — computed by the backend's substring-verification pass, not trusted from either the model or the client |
 | `latestAnalysisId`, `latestConditionCount`, `latestReviewStatus` | System — denormalized onto the note doc by the backend whenever an analysis completes or is reviewed |
+| `recaptureReminders` | System — computed at analysis time by querying this uid's other notes sharing the same `pseudonym`, diffing their latest documented conditions against this note's; never written by the model or the client |
 
 **The query that matters — "all notes for user X, newest first"**: `users/{uid}/notes`
 ordered by `createdAt desc`. Because it's a subcollection keyed by `{uid}`, and every read in
@@ -344,7 +349,7 @@ cd backend
 pytest -q
 ```
 
-47 tests across 8 files, all passing, no live network calls (Gemini and Firestore are mocked):
+70 tests across 9 files, all passing, no live network calls (Gemini and Firestore are mocked):
 
 | File | Covers |
 |---|---|
@@ -356,6 +361,7 @@ pytest -q
 | `test_auth.py` | Firebase init failure surfaces as 503 (misconfigured), not an unhandled 500 |
 | `test_rate_limit.py` | Per-user sliding window: allows up to the limit, blocks the next one, doesn't block a different user |
 | `test_metrics.py` | Correction-rate aggregation by condition name, unreviewed analyses excluded, no division-by-zero with no data yet |
+| `test_recapture.py` | Same-pseudonym matching, current-visit conditions excluded, rejected conditions ignored, no reminder when nothing is missing |
 
 Beyond the automated suite, the entire flow — signup, real Gemini analysis, edit/reject/add,
 save, reload, history — has been run live against a real Firebase project and a real Gemini
@@ -371,12 +377,12 @@ Left unfinished, deliberately, in favor of getting the core loop solid end to en
   above) and the backend has no obstacle to a "re-analyze with the current prompt" button, but
   no route or UI exists for triggering it yet — a note can only be analyzed once from the
   current frontend.
-- **No streaming or caching** (2 of the 6 optional bonuses). Rate limiting and inline
-  evidence-quote highlighting, originally on this list, are now built — see
-  [What it does](#what-it-does). Caching identical notes would be cheap to add on top of the
-  existing analysis pipeline; streaming would need a different Gemini call shape
-  (`generate_content_stream`) and a frontend that renders partial JSON, a bigger change than the
-  rest of this list.
+- **No caching of identical notes** (1 of the 6 optional bonuses — the other five are built, see
+  [What it does](#what-it-does)). Cheap to add on top of the existing pipeline — hash the note
+  text, key a Firestore or in-memory lookup on it, skip the Gemini call on a repeat submission —
+  but deliberately left out: duplicate identical clinical notes are the least likely of the six
+  bonuses to occur in real use, since even a follow-up visit for the same patient is a new note
+  with new text.
 - **No component-level frontend tests** — the backend has 47; the frontend has been verified by
   hand, live, repeatedly, but not with an automated suite. The highest-value addition here
   would be `AnalysisPage`'s review-diff logic (the `source: ai → human_edited` transition).
