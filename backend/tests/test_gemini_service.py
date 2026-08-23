@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from app.gemini_service import (
     AnalysisFailure,
     build_streamed_output,
+    get_cached_analysis,
     run_analysis,
     stream_analysis_text,
     transcribe_document,
@@ -177,6 +178,43 @@ def test_transcribe_document_returns_stripped_text(mock_get_client):
     text = transcribe_document(b"fake-image-bytes", "image/png")
 
     assert text == "Patient has a cough."
+
+
+@patch("app.gemini_service._get_client")
+def test_run_analysis_skips_gemini_on_identical_resubmission(mock_get_client):
+    parsed = AIAnalysisOutput(
+        conditions=[],
+        documentation_gaps=[],
+        summary="Routine visit.",
+    )
+    mock_client = MagicMock()
+    mock_client.models.generate_content.return_value = _fake_response(parsed)
+    mock_get_client.return_value = mock_client
+
+    note_text = "Patient in for a routine checkup, no complaints."
+    first_output, first_model = run_analysis(note_text)
+    second_output, second_model = run_analysis(note_text)
+
+    assert mock_client.models.generate_content.call_count == 1
+    assert second_output == first_output
+    assert second_model == first_model
+
+
+@patch("app.gemini_service._get_client")
+def test_run_analysis_does_not_cache_across_different_notes(mock_get_client):
+    parsed = AIAnalysisOutput(conditions=[], documentation_gaps=[], summary="ok")
+    mock_client = MagicMock()
+    mock_client.models.generate_content.return_value = _fake_response(parsed)
+    mock_get_client.return_value = mock_client
+
+    run_analysis("Patient A note text.")
+    run_analysis("Patient B note text.")
+
+    assert mock_client.models.generate_content.call_count == 2
+
+
+def test_get_cached_analysis_returns_none_before_any_analysis():
+    assert get_cached_analysis("never seen this note before") is None
 
 
 @patch("app.gemini_service._get_client")

@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import re
 from collections.abc import Generator
@@ -12,6 +13,28 @@ from .prompts.note_analysis_prompt import build_prompt
 logger = logging.getLogger(__name__)
 
 _client: genai.Client | None = None
+
+_analysis_cache: dict[str, tuple[StoredAnalysisOutput, str]] = {}
+
+
+def _cache_key(note_text: str) -> str:
+    return hashlib.sha256(note_text.encode("utf-8")).hexdigest()
+
+
+def get_cached_analysis(note_text: str) -> tuple[StoredAnalysisOutput, str] | None:
+    """Returns a cached (output, model_version) pair if this exact note text has been
+    analyzed before, or None. Avoids paying for a repeat Gemini call on a byte-identical
+    resubmission. Process-local, in-memory, unbounded — the same documented tradeoff as
+    rate_limit.py: fine at this scale, resets on redeploy, not shared across instances."""
+    return _analysis_cache.get(_cache_key(note_text))
+
+
+def _store_cache(note_text: str, output: StoredAnalysisOutput, model_version: str) -> None:
+    _analysis_cache[_cache_key(note_text)] = (output, model_version)
+
+
+def _reset_cache_for_tests() -> None:
+    _analysis_cache.clear()
 
 
 class AnalysisFailure(Exception):
@@ -79,6 +102,10 @@ def run_analysis(note_text: str, max_attempts: int = 2) -> tuple[StoredAnalysisO
     Returns (stored_output, model_version_used). Raises AnalysisFailure if every
     attempt fails validation or the API call itself errors out.
     """
+    cached = get_cached_analysis(note_text)
+    if cached is not None:
+        return cached
+
     settings = get_settings()
     client = _get_client()
     base_prompt = build_prompt(note_text)
@@ -110,7 +137,9 @@ def run_analysis(note_text: str, max_attempts: int = 2) -> tuple[StoredAnalysisO
                 # SDK couldn't parse/validate against the schema at all.
                 raise ValueError(f"Gemini response did not match the schema: {response.text!r}")
 
-            return _build_stored_output(parsed, note_text), settings.gemini_model
+            stored = _build_stored_output(parsed, note_text)
+            _store_cache(note_text, stored, settings.gemini_model)
+            return stored, settings.gemini_model
 
         except Exception as exc:  # schema validation failure, API error, network error, etc.
             logger.warning("Gemini analysis attempt %d/%d failed: %s", attempt, max_attempts, exc)
@@ -150,7 +179,9 @@ def build_streamed_output(accumulated_text: str, note_text: str) -> StoredAnalys
     that and falls back to run_analysis()'s own retry, rather than duplicating retry
     logic here."""
     parsed = AIAnalysisOutput.model_validate_json(accumulated_text)
-    return _build_stored_output(parsed, note_text)
+    stored = _build_stored_output(parsed, note_text)
+    _store_cache(note_text, stored, get_settings().gemini_model)
+    return stored
 
 
 _TRANSCRIBE_PROMPT = (

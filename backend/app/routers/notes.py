@@ -11,6 +11,7 @@ from ..config import get_settings
 from ..gemini_service import (
     AnalysisFailure,
     build_streamed_output,
+    get_cached_analysis,
     run_analysis,
     stream_analysis_text,
     transcribe_document,
@@ -121,7 +122,9 @@ def submit_note_streaming(payload: NoteCreateRequest, uid: str = Depends(get_cur
     difference is the client sees Gemini's raw JSON arrive incrementally instead of
     waiting on a blank screen for the full response. If the streamed text doesn't
     validate, this falls back to run_analysis() (which retries once internally) rather
-    than duplicating retry logic here."""
+    than duplicating retry logic here. A byte-identical note skips the Gemini call
+    entirely (see gemini_service.get_cached_analysis) — there is nothing to stream in
+    that case, so the client goes straight from submit to complete."""
     enforce_note_submission_rate_limit(uid)
     note = db.create_note(uid, payload)
     settings = get_settings()
@@ -130,15 +133,19 @@ def submit_note_streaming(payload: NoteCreateRequest, uid: str = Depends(get_cur
     def event_stream():
         accumulated = ""
         try:
-            for delta in stream_analysis_text(payload.note_text):
-                accumulated += delta
-                yield f"event: delta\ndata: {json.dumps({'text': delta})}\n\n"
+            cached = get_cached_analysis(payload.note_text)
+            if cached is not None:
+                output, _model = cached
+            else:
+                for delta in stream_analysis_text(payload.note_text):
+                    accumulated += delta
+                    yield f"event: delta\ndata: {json.dumps({'text': delta})}\n\n"
 
-            try:
-                output = build_streamed_output(accumulated, payload.note_text)
-            except (ValidationError, ValueError) as exc:
-                logger.warning("Streamed output failed validation, falling back: %s", exc)
-                output, _model = run_analysis(payload.note_text)
+                try:
+                    output = build_streamed_output(accumulated, payload.note_text)
+                except (ValidationError, ValueError) as exc:
+                    logger.warning("Streamed output failed validation, falling back: %s", exc)
+                    output, _model = run_analysis(payload.note_text)
 
             reminders = db.find_recapture_reminders(
                 uid, payload.pseudonym, note.id, {c.name for c in output.conditions if not c.rejected}

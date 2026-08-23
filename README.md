@@ -92,7 +92,7 @@ Open `http://localhost:5173` → sign up with any email/password → paste one o
 
 ```bash
 cd backend && pytest -q
-# 70 passed
+# 73 passed
 ```
 
 ---
@@ -161,7 +161,8 @@ literal substring of the original note before anything is stored.
 | **PDF / photo upload** | A photographed or scanned note (image or PDF) is transcribed to plain text via Gemini's multimodal input, then flows through the exact same validated pipeline as typed text |
 | **Voice dictation** | The Web Speech API fills the note textarea from spoken input as an alternative to typing, live-transcribed with an interim preview |
 | **Cross-visit recapture reminders** | Flags a chronic condition documented at a past visit for the same patient (matched by pseudonym) that's absent from today's note — the real "annual recapture" gap in CMS/HCC risk adjustment, not just a per-note check |
-| **70 automated tests** | Schema validation, quote verification, Gemini retry/failure paths, cross-user isolation, rate limiting, metrics aggregation, and recapture-reminder matching, all covered |
+| **Identical-note caching** | A byte-identical resubmission skips the Gemini call entirely and returns the cached analysis — no repeat cost for the same note text |
+| **73 automated tests** | Schema validation, quote verification, Gemini retry/failure/caching paths, cross-user isolation, rate limiting, metrics aggregation, and recapture-reminder matching, all covered |
 
 ---
 
@@ -349,7 +350,7 @@ cd backend
 pytest -q
 ```
 
-70 tests across 9 files, all passing, no live network calls (Gemini and Firestore are mocked):
+73 tests across 9 files, all passing, no live network calls (Gemini and Firestore are mocked):
 
 | File | Covers |
 |---|---|
@@ -362,6 +363,8 @@ pytest -q
 | `test_rate_limit.py` | Per-user sliding window: allows up to the limit, blocks the next one, doesn't block a different user |
 | `test_metrics.py` | Correction-rate aggregation by condition name, unreviewed analyses excluded, no division-by-zero with no data yet |
 | `test_recapture.py` | Same-pseudonym matching, current-visit conditions excluded, rejected conditions ignored, no reminder when nothing is missing |
+
+`test_gemini_service.py` also covers the cache directly: an identical resubmission skips the Gemini call (`generate_content.call_count == 1` across two calls to `run_analysis`), while a different note text always calls through.
 
 Beyond the automated suite, the entire flow — signup, real Gemini analysis, edit/reject/add,
 save, reload, history — has been run live against a real Firebase project and a real Gemini
@@ -377,20 +380,16 @@ Left unfinished, deliberately, in favor of getting the core loop solid end to en
   above) and the backend has no obstacle to a "re-analyze with the current prompt" button, but
   no route or UI exists for triggering it yet — a note can only be analyzed once from the
   current frontend.
-- **No caching of identical notes** (1 of the 6 optional bonuses — the other five are built, see
-  [What it does](#what-it-does)). Cheap to add on top of the existing pipeline — hash the note
-  text, key a Firestore or in-memory lookup on it, skip the Gemini call on a repeat submission —
-  but deliberately left out: duplicate identical clinical notes are the least likely of the six
-  bonuses to occur in real use, since even a follow-up visit for the same patient is a new note
-  with new text.
-- **No component-level frontend tests** — the backend has 47; the frontend has been verified by
+- **No component-level frontend tests** — the backend has 73; the frontend has been verified by
   hand, live, repeatedly, but not with an automated suite. The highest-value addition here
   would be `AnalysisPage`'s review-diff logic (the `source: ai → human_edited` transition).
 - **ICD-10 codes are exactly as approximate as the assessment says is acceptable** — no lookup
   against a real coding table, per the brief's explicit note that this isn't being evaluated.
-- **Rate limiting is in-memory, single-instance** — a documented, deliberate tradeoff (see
-  `backend/app/rate_limit.py`), not an oversight. It resets on redeploy and wouldn't be shared
-  across multiple backend instances; a real production version would move it to Redis at the
+- **Rate limiting and the identical-note cache are both in-memory, single-instance** — a
+  documented, deliberate tradeoff (see `backend/app/rate_limit.py` and the `_analysis_cache`
+  dict in `backend/app/gemini_service.py`), not an oversight. Both reset on redeploy and
+  wouldn't be shared across multiple backend instances; a real production version would move
+  both to Redis at the
   point this ever needed to scale horizontally, which a free-tier single-dyno deployment doesn't.
 
 With one more week, in priority order: re-analysis UI, frontend tests, then streaming/caching.
