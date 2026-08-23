@@ -472,8 +472,8 @@ note_insight/
 │   │   └── routers/
 │   │       ├── health.py            GET /health
 │   │       └── notes.py             POST /notes, GET /notes, GET /notes/metrics, review endpoint
-│   └── tests/                       47 tests: schema, quotes, retries, isolation, HTTP layer,
-│                                     rate limiting, metrics
+│   └── tests/                       73 tests: schema, quotes, retries, isolation, HTTP layer,
+│                                     rate limiting, metrics, recapture reminders
 ├── frontend/                       React + TypeScript (Vite)
 │   └── src/
 │       ├── pages/                   LandingPage, AuthPage, NoteSubmitPage, AnalysisPage,
