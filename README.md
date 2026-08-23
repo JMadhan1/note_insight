@@ -395,7 +395,7 @@ Left unfinished, deliberately, in favor of getting the core loop solid end to en
   both to Redis at the
   point this ever needed to scale horizontally, which a free-tier single-dyno deployment doesn't.
 
-With one more week, in priority order: re-analysis UI, frontend tests, then streaming/caching.
+With one more week, in priority order: re-analysis UI, then frontend tests.
 
 ---
 
