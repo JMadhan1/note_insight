@@ -8,6 +8,9 @@
 
 **Paste a clinical note in, get a coder-ready structured analysis back in under a minute.**
 
+**Live app: [note-insight.jmadhan.me](https://note-insight.jmadhan.me)** — sign up with any
+email/password, or use the test account `note-insight-test@example.com` / `TestPass123!`.
+
 Dr. Marina Ríos sees 20+ patients a day and writes a free-text note after each visit. Today
 that note sits untouched for days before a coder reads it, queries her about what she meant,
 and by then she's forgotten the patient. Note Insight closes that gap: it extracts conditions,
@@ -438,6 +441,17 @@ where the frontend actually lives:
    the deployed frontend's requests will be rejected by CORS even though everything else is
    correctly configured.
 
+**Custom domain**: the live app is served from `note-insight.jmadhan.me` (a domain added on top
+of the same Vercel project) rather than the raw `.vercel.app` URL. Pointing a custom domain at
+an existing Firebase + Render deployment needs two more allowlists updated, both easy to miss
+since neither shows an error until a real request hits them:
+
+- **Firebase Console → Authentication → Settings → Authorized domains** — add the custom
+  domain, or sign-in fails with `auth/unauthorized-domain`.
+- **Render → `CORS_ALLOW_ORIGINS`** — add the custom domain to the comma-separated list
+  alongside the `.vercel.app` origin, or every API call past sign-in fails CORS silently in
+  the console while the page itself looks fine.
+
 ---
 
 ## Project structure
@@ -494,5 +508,4 @@ this repo:
 
 ## Time spent
 
-*(fill in honestly before submitting — the assessment explicitly says this is never held
-against a candidate)*
+~30 hours.
